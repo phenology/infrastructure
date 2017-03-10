@@ -13,8 +13,8 @@ For Windows, despite the [Ubuntu environment](#windows) was set to run Ansible, 
 The path to vagrant home should not have spaces. Assuming the installation path was the default one, to set it do the following (create dir before setting it):
 ```
 set VAGRANT_HOME=C:\HashiCorp\Vagrant\home
-#set also the BOB_DOMAIN
-set BOB_DOMAIN=<domain to use>
+#set also the PHENO_DOMAIN
+set PHENO_DOMAIN=<domain to use>
 ```
 
 On Windows to run Vagrant's commands use the CMD console.
@@ -49,10 +49,10 @@ When running on Linux, and if a DNS server is not used, it is required to tell v
 On Windows such option does not have effect because the [Ubuntu environment](#windows) has its own */etc/hosts*.
 At the bash console edit */etc/hosts* with IPs obtains through.
 ```
-vagrant ssh-config bob0
+vagrant ssh-config pheno0
 
-# With output given by the above command connect to bob0 (only the port will differ)
-ssh -i .vagrant/machines/bob0/virtualbox/private_key ubuntu@127.0.0.1 -p <bob0_port> "cat /etc/hosts"
+# With output given by the above command connect to pheno0 (only the port will differ)
+ssh -i .vagrant/machines/pheno0/virtualbox/private_key ubuntu@127.0.0.1 -p <pheno0_port> "cat /etc/hosts"
 ```
 
 
@@ -72,7 +72,7 @@ vagrant destroy
 
 Verify login.
 ```
-ssh -i bob.key root@bob0.$BOB_DOMAIN uptime
-ssh -i bob.key root@bob1.$BOB_DOMAIN uptime
-ssh -i bob.key root@bob2.$BOB_DOMAIN uptime
+ssh -i pheno.key root@pheno0.$PHENO_DOMAIN uptime
+ssh -i pheno.key root@pheno1.$PHENO_DOMAIN uptime
+ssh -i pheno.key root@pheno2.$PHENO_DOMAIN uptime
 ```

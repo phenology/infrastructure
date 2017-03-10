@@ -14,25 +14,25 @@ When using cloud machines or vagrant machines they are/have:
 1. Ubuntu 16.04 OS
 2. Public network interface
 3. OS disk, 200Mb for software + enough room in /tmp
-4. Passwordless login as root with `bob.key` private key.
+4. Passwordless login as root with `pheno.key` private key.
 5. XFS Partition mounted at /data/local (used for swapfile)
 6. Python2 to run Ansible tasks
 
 Setup environment:
 ```
 #Linux environments (also in the embedded Ubuntu environment in Windows).
-export BOB_DOMAIN=<domain to use>
+export PHENO_DOMAIN=<domain to use>
 # Key used by root
-ssh-keygen -f bob.key
-# Key used by bob user
-ssh-keygen -f roles/common/files/bob.key
+ssh-keygen -f pheno.key
+# Key used by pheno user
+ssh-keygen -f roles/common/files/pheno.key
 sudo pip install ansible
 ```
 
 # Ansible
 Uses ansible to provision servers.
 
-POSIX user `bob` created with password `pass1234`.
+POSIX user `pheno` created with password `pass1234`.
 To add more users edit `roles/common/vars/main.yml` file.
 
 Firewall only allows connections from trusted networks.
@@ -63,12 +63,12 @@ Create the `hosts` file see `hosts.template` for template.
 
 Now use ansible to verify login.
 ```
-ansible all --private-key=bob.key -u root -i hosts -m ping
+ansible all --private-key=pheno.key -u root -i hosts -m ping
 ```
 
 For cloud based setup, skip this when deploying to vagrant. The disk (in example /dev/vdb) for /data/local can be partitioned/formatted/mounted (also sets ups ssh keys for root) with:
 ```
-ansible-playbook --private-key=bob.key -i hosts -e datadisk=/dev/vdb prepcloud-playbook.yml
+ansible-playbook --private-key=pheno.key -i hosts -e datadisk=/dev/vdb prepcloud-playbook.yml
 ```
 
 If a apt is auto updating the playbook will fail. Use following commands to clean on the host:
@@ -79,5 +79,5 @@ dpkg --configure -a
 
 Time to setup the cluster.
 ```
-ansible-playbook --private-key=bob.key --ssh-extra-args="-o StrictHostKeyChecking=no" -i hosts playbook.yml
+ansible-playbook --private-key=pheno.key --ssh-extra-args="-o StrictHostKeyChecking=no" -i hosts playbook.yml
 ```

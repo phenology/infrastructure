@@ -2,6 +2,6 @@
 /ansible/hosts
 /ansible/*.retry
 /vagrant/.vagrant
-bob.key
-bob.key.pub
+pheno.key
+pheno.key.pub
 /vagrant/*-cloudimg-console.log

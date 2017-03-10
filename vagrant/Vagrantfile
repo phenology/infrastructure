@@ -9,11 +9,11 @@ Vagrant.configure(2) do |config|
 
 
   (0..2).each do |i|
-    config.vm.define "bob#{i}" do |node|
-      node.vm.hostname = "bob#{i}.#{ENV['BOB_DOMAIN']}"
+    config.vm.define "pheno#{i}" do |node|
+      node.vm.hostname = "pheno#{i}.#{ENV['PHENO_DOMAIN']}"
       # storage disk
       node.persistent_storage.enabled = true
-      node.persistent_storage.location = "bob#{i}-data.vdi"
+      node.persistent_storage.location = "pheno#{i}-data.vdi"
       node.persistent_storage.size = 20000
       node.persistent_storage.mountname = 'data'
       node.persistent_storage.filesystem = 'xfs'
@@ -35,8 +35,8 @@ Vagrant.configure(2) do |config|
 
   config.vm.provision "shell", inline: <<-SHELL
     mkdir -p /root/.ssh
-    cp /vagrant/bob.key /root/.ssh/id_rsa
-    cp /vagrant/bob.key.pub /root/.ssh/id_rsa.pub
+    cp /vagrant/pheno.key /root/.ssh/id_rsa
+    cp /vagrant/pheno.key.pub /root/.ssh/id_rsa.pub
     cat /root/.ssh/id_rsa.pub >> /root/.ssh/authorized_keys
     chmod -R 600 /root/.ssh
     apt-get update
