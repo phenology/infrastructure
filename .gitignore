@@ -1,0 +1,7 @@
+/vagrant/*.vdi
+/ansible/hosts
+/ansible/*.retry
+/vagrant/.vagrant
+bob.key
+bob.key.pub
+/vagrant/*-cloudimg-console.log
