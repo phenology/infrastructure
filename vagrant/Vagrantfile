@@ -10,7 +10,7 @@ Vagrant.configure(2) do |config|
 
   (0..2).each do |i|
     config.vm.define "bob#{i}" do |node|
-      node.vm.hostname = "bob#{i}.#{ENV['EMMA_DOMAIN']}"
+      node.vm.hostname = "bob#{i}.#{ENV['BOB_DOMAIN']}"
       # storage disk
       node.persistent_storage.enabled = true
       node.persistent_storage.location = "bob#{i}-data.vdi"

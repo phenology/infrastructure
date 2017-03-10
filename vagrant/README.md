@@ -13,8 +13,8 @@ For Windows, despite the [Ubuntu environment](#windows) was set to run Ansible, 
 The path to vagrant home should not have spaces. Assuming the installation path was the default one, to set it do the following (create dir before setting it):
 ```
 set VAGRANT_HOME=C:\HashiCorp\Vagrant\home
-#set also the EMMA_DOMAIN
-set EMMA_DOMAIN=<domain to use>
+#set also the BOB_DOMAIN
+set BOB_DOMAIN=<domain to use>
 ```
 
 On Windows to run Vagrant's commands use the CMD console.
@@ -72,7 +72,7 @@ vagrant destroy
 
 Verify login.
 ```
-ssh -i bob.key root@bob0.$EMMA_DOMAIN uptime
-ssh -i bob.key root@bob1.$EMMA_DOMAIN uptime
-ssh -i bob.key root@bob2.$EMMA_DOMAIN uptime
+ssh -i bob.key root@bob0.$BOB_DOMAIN uptime
+ssh -i bob.key root@bob1.$BOB_DOMAIN uptime
+ssh -i bob.key root@bob2.$BOB_DOMAIN uptime
 ```

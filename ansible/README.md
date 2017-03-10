@@ -21,7 +21,7 @@ When using cloud machines or vagrant machines they are/have:
 Setup environment:
 ```
 #Linux environments (also in the embedded Ubuntu environment in Windows).
-export EMMA_DOMAIN=<domain to use>
+export BOB_DOMAIN=<domain to use>
 # Key used by root
 ssh-keygen -f bob.key
 # Key used by bob user
