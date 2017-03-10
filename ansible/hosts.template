@@ -1,0 +1,8 @@
+[spark-master]
+bob1.<domain to use>
+[spark-worker]
+bob0.<domain to use>
+bob2.<domain to use>
+[spark:children]
+spark-master
+spark-worker

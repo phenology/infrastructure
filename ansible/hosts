@@ -1,0 +1,8 @@
+[spark-master]
+bob1.bob.nlesc.nl
+[spark-worker]
+bob0.bob.nlesc.nl
+bob2.bob.nlesc.nl
+[spark:children]
+spark-master
+spark-worker
