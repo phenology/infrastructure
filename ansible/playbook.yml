@@ -1,0 +1,14 @@
+---
+- hosts: all
+  remote_user: root
+  roles:
+    - common
+  any_errors_fatal: true
+- hosts: spark-master
+  remote_user: root
+  roles:
+    - spark-master
+- hosts: spark
+  remote_user: root
+  roles:
+    - spark-slave
