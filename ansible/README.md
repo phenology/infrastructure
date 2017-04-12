@@ -78,12 +78,12 @@ Create the `hosts` file see `hosts.template` for template.
 
 Now use ansible to verify login.
 ```
-ansible all --private-key=pheno.key -u root -i hosts -m ping
+ansible all --private-key=../pheno.key -u root -i hosts -m ping
 ```
 
 For cloud based setup, skip this when deploying to vagrant. The disk (in example /dev/vdb) for /data/local can be partitioned/formatted/mounted (also sets ups ssh keys for root) with:
 ```
-ansible-playbook --private-key=pheno.key -i hosts -e datadisk=/dev/vdb prepcloud-playbook.yml
+ansible-playbook --private-key=../pheno.key --ssh-extra-args="-o StrictHostKeyChecking=no" -i hosts -e datadisk=/dev/vdb prepcloud-playbook.yml
 ```
 
 If a apt is auto updating the playbook will fail. Use following commands to clean on the host:
@@ -94,5 +94,5 @@ dpkg --configure -a
 
 Time to setup the cluster.
 ```
-ansible-playbook --private-key=pheno.key --ssh-extra-args="-o StrictHostKeyChecking=no" -i hosts playbook.yml
+ansible-playbook --private-key=../pheno.key --ssh-extra-args="-o StrictHostKeyChecking=no" -i hosts playbook.yml
 ```
