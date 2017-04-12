@@ -32,6 +32,21 @@ sudo pip install ansible
 # Ansible
 Uses ansible to provision servers.
 
+##Install ansible
+Ansible should be installed using pip. To install pip and ansible dependencies do the following:
+
+```
+#Install pip:
+sudo apt-get install python-pip
+
+#Install dependencies:
+sudo apt install libffi-dev python-dev libssl-dev
+
+#Install ansible (Note that sudo is not used here because you are installing Ansible into your own virtual environment.):
+pip install ansible
+
+```
+
 POSIX user `pheno` created with password `pass1234`.
 To add more users edit `roles/common/vars/main.yml` file.
 
