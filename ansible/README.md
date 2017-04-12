@@ -30,7 +30,7 @@ sudo pip install ansible
 ```
 
 # Ansible
-Uses ansible to provision servers.
+The project uses ansible to provision servers. The recommended version is Ansible 2.2.
 
 ##Install ansible
 Ansible should be installed using pip. To install pip and ansible dependencies do the following:
@@ -57,7 +57,7 @@ The trusted networks can be changed in `roles/common/vars/main.yml` file.
 When running on a Windows environment it is recommended to use the embedded Ubuntu environment, [installation guide](https://msdn.microsoft.com/en-us/commandline/wsl/install_guide).
 After the installation the Ubuntu environment is accessible through the bash command of Windows.
 
-Note the *C* drive will be mounted with the files owned by *root* and file permissions set to *777*. Ansible does run with such file permissions. Hence, you need to clone the repository into the home directory of the embedded Ubuntu environment. The environment set on Windows CMD consolge session, for example to run Vagrant, is not shared with embedded Ubuntu bash.
+Note the *C* drive will be mounted with the files owned by *root* and file permissions set to *777*. Ansible does run with such file permissions. Hence, you need to clone the repository into the home directory of the embedded Ubuntu environment. The environment set on Windows CMD console session, for example to run Vagrant, is not shared with embedded Ubuntu bash.
 
 ## HDFS
 
