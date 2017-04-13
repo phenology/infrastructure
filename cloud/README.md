@@ -1,1 +1,1 @@
-#Cluster on the cloud
+# Cluster setup on a cloud infra-structure
