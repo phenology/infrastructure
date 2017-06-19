@@ -36,7 +36,7 @@ object read_hdfs extends App {
     val model = kmeans.fit(ss.createDataset(singleBand_1_RDD))
 
     // Evaluate clustering by computing Within Set Sum of Squared Errors.
-    val WSSSE = model.computeCost(singInput)
+    val WSSSE = model.computeCost(singleBand_1_RDD)
     println(s"Within Set Sum of Squared Errors = $WSSSE")
 
     // Shows the result.
