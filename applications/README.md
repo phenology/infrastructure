@@ -46,7 +46,7 @@ Web-based notebooks are a nice way for an user to do provenance of his/her work 
 ### Jupyter NoteBooks
 To run Jupyter Notebooks we use Jupyter Hub. For a compressive tutorial in how to use Jupyter Hub please read its [pdf version](https://github.com/jupyterhub/jupyterhub-tutorial/blob/master/JupyterHub.pdf) and watch its [youtube version](https://youtu.be/gSVvxOchT8Y).
 
-Under the directory [jupyter_notebooks]() several templates can be found for different kernels. They contain examples in how GeoTiffs or HDF5 files are loaded as a **RDD**. They also show how to save results in different formats.
+Under the directory [jupyter_notebooks](./notebooks/) several templates can be found for different kernels. They contain examples in how GeoTiffs or HDF5 files are loaded as a **RDD**. They also show how to save results in different formats.
 
 ### Zepplin NoteBooks
 
