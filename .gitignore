@@ -6,3 +6,17 @@ pheno.key
 pheno.key.pub
 /vagrant/*-cloudimg-console.log
 data/
+build.properties
+Dependencies
+Environment
+Info
+target
+Version
+applications/project
+applications/out
+applications/sbt
+applications/target
+*.iml
+**/*.iml
+.idea
+**/.idea
