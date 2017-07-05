@@ -266,13 +266,15 @@ object geoTrellis_multiTiffs_save_GeoTiff extends App {
     val cluster_cells :Array[Double] = grid_clusters_res.values.collect()
     //Define a Tile
     val cluster_cellsD = DoubleArrayTile(cluster_cells, num_cols_rows._1, num_cols_rows._2)
+    cluster_cellsD.g
 
     val cluster_tile2 = geotrellis.raster.DoubleArrayTile.empty(num_cols_rows._1, num_cols_rows._2)
 
     cfor(0)(_ < num_cols_rows._1, _ + 1) { col =>
       cfor(0)(_ < num_cols_rows._2, _ + 1) { row =>
         val v = cluster_cellsD.get(col, row)
-        cluster_tile2.setDouble(col, row, v)
+        if (v != Double.NaN)
+          cluster_tile2.setDouble(col, row, v)
       }
     }
 
