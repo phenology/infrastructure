@@ -37,7 +37,35 @@ Not it is time to upload some data. The following example shows how to upload th
 The uploaded files can also be listed using the [HDFS web-ui interface](https://github.com/nlesc-sherlock/emma/blob/223f93d91b63399cded51c52faa375ad77601fbd/hadoop.md#hadoop).
 
 ### Minio
+[Minio](https://www.minio.io/) is a distributed object storage server built for cloud applications and devops.
+To use minio in distributed mode and have redundancy there are some pre-requisites. To understand them you should read the [distributed minio quickstart guide](https://docs.minio.io/docs/distributed-minio-quickstart-guide). 
 
+Minio web GUI is available thourgh *http://pheno0.phenovari-utwente.surf-hosted.nl:9091*, or any other host part of the *minio* group.
+For command line interaction we use [S3cmd tool for Amazon Simple Storage Service (S3)](https://github.com/s3tools/s3cmd). S3cmd is a free command line tool and client for uploading, retrieving and managing data in Amazon S3 and other cloud storage service providers that use the S3 protocolto, such as Google Cloud storage and Minio.
+
+To access Minio in our platform the user should create **.s3cfg** at the his/her home directory.
+```
+host_base = <IP_pheno0>:9091
+host_bucket = <IP_pheno0>:9091
+access_key = <access_key>
+secret_key = <secret_key>
+use_https = False
+list_md5 = False
+use_mime_magic = False
+#Make sure the region is the same as the one used by minio
+bucket_location = us-east-1
+```
+
+Example of commands:
+```
+s3cmd  ls s3://files
+s3cmd get s3://files/sonnets.txt sonnets.txt
+```
+
+To upload data to a sub-directory follow this example:
+```
+cd <root_dir>/<sub_dir> ; for f in `ls *`; do s3cmd put $f s3://<root_dir>/<sub_dir>/$f; done
+```
 
 ## Notebooks
 
