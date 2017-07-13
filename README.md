@@ -1,5 +1,12 @@
 # Infrastructure
-All work related with infrastructure.
+All work related with infrastructure. To clone it and also get the sub-module you should clone it in the following way:
+```
+#http version:
+git clone --recursive https://github.com/phenology/infrastructure.git 
+
+#ssh version:
+git clone --recursive git@github.com:phenology/infrastructure.git
+```
 
 ## EMMA
 Emma is a project where ansible is used to setup a Spark cluster with GeoTrellis and SciSpark modules, and using for storage two flavors of storage, as file-based HDFS and GlusterFS and as object-based Minio (it has the same API as Amazon S3). To install the platform the user should read the instructions detailed in [**emma's** README](https://github.com/nlesc-sherlock/emma/blob/master/README.md).
