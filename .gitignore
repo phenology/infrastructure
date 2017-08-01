@@ -12,6 +12,7 @@ Environment
 Info
 target
 Version
+applications/geoTrellis
 applications/project
 applications/out
 applications/sbt
@@ -20,3 +21,4 @@ applications/target
 **/*.iml
 .idea
 **/.idea
+confs/
