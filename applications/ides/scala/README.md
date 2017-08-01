@@ -20,9 +20,10 @@ Add libraries to Intelij IDE.
 4) Add Spark-2.1.1-bin-without-hadoop jars
 
 5) Add GeoTrellis dependency from maven (locationtech.geotrellis)
-  a) geotrellis-spark-2.11
-  b) geotrellis-raster-2.11
-  c) geotrellis-proj4-2.11
+  a) geotrellis-spark_2.11:1.1.1
+  b) geotrellis-raster_2.11:1.1.1
+  c) geotrellis-proj4_2.11:1.1.1
+  d) geotrallis-vector_2.11:1.1.1
 
 6) Download notebooks as scala into the proper directory:
   a) Bellow the imports you need to add:
@@ -43,6 +44,9 @@ Add libraries to Intelij IDE.
 A) Install com.quantifind.charts.Highcharst for plotting in Scala.
   1- Maven com.quantifind:wisp_2.11:0.0.4
 
+B) For Json install spray-json_2.9.1:1.0.1
+
+C) 
 
 
 

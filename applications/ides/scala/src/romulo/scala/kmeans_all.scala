@@ -5,10 +5,10 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, 
 
 
 import geotrellis.proj4.CRS
-import geotrellis.raster.{CellType, ArrayTile, DoubleArrayTile, Tile, UByteCellType}
+import geotrellis.raster.{CellType, DoubleArrayTile, Tile, UByteCellType}
 import geotrellis.raster.io.geotiff._
 import geotrellis.raster.io.geotiff.writer.GeoTiffWriter
-import geotrellis.raster.io.geotiff.{GeoTiff, SinglebandGeoTiff}
+import geotrellis.raster.io.geotiff.SinglebandGeoTiff
 import geotrellis.spark.io.hadoop._
 import org.apache.hadoop.io._
 import geotrellis.vector.{Extent, ProjectedExtent}
@@ -19,7 +19,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
 
-import org.apache.hadoop.io.{IOUtils, SequenceFile}
+import org.apache.hadoop.io.{SequenceFile}
 import org.apache.hadoop.io.SequenceFile.Writer
 
 //Spire is a numeric library for Scala which is intended to be generic, fast, and precise.
