@@ -65,13 +65,13 @@ object satellite_model_correlation_len_neg extends App {
     var mask_str = ""
     if (toBeMasked)
       mask_str = "_mask"
-    var model_grid0_path = out_path + model_dir + "_model_grid0"
-    var model_grid0_index_path = out_path + model_dir + "_model_grid0_index"
+    var model_grid0_path = out_path + model_dir + "_grid0"
+    var model_grid0_index_path = out_path + model_dir + "_grid0_index"
 
-    var model_grid_path = out_path + model_dir + "_model_grid"
-    var satellite_grid_path = out_path + satellite_dir + "_model_grid"
-    var model_matrix_path = out_path + model_dir + "_model_matrix"
-    var satellite_matrix_path = out_path + satellite_dir + "_model_matrix"
+    var model_grid_path = out_path + model_dir + "_grid"
+    var satellite_grid_path = out_path + satellite_dir + "_grid"
+    var model_matrix_path = out_path + model_dir + "_matrix"
+    var satellite_matrix_path = out_path + satellite_dir + "_matrix"
     var metadata_path = out_path + model_dir + "_metadata"
 
     val model_rdd_offline_exists = fs.exists(new org.apache.hadoop.fs.Path(model_grid_path))
