@@ -14,6 +14,7 @@ import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.distributed.{BlockMatrix, CoordinateMatrix, MatrixEntry, RowMatrix}
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{SparkConf, SparkContext}
 
 import scala.sys.process._
@@ -64,14 +65,14 @@ object satellite_model_svd extends App {
     var mask_str = ""
     if (toBeMasked)
       mask_str = "_mask"
-    var model_grid0_path = out_path + model_dir + "_model_grid0"
-    var model_grid0_index_path = out_path + model_dir + "_model_grid0_index"
+    var model_grid0_path = out_path + model_dir + "_grid0"
+    var model_grid0_index_path = out_path + model_dir + "_grid0_index"
 
-    var model_grid_path = out_path + model_dir + "_model_grid"
-    var satellite_grid_path = out_path + satellite_dir + "_satellite_grid"
-    var model_matrix_path = out_path + model_dir + "_model_matrix"
-    var satellite_matrix_path = out_path + satellite_dir + "_satellite_matrix"
-    var metadata_path = out_path + "/metadata"
+    var model_grid_path = out_path + model_dir + "_grid"
+    var satellite_grid_path = out_path + satellite_dir + "_grid"
+    var model_matrix_path = out_path + model_dir + "_matrix"
+    var satellite_matrix_path = out_path + satellite_dir + "_matrix"
+    var metadata_path = out_path + model_dir + "_metadata"
 
     val model_rdd_offline_exists = fs.exists(new org.apache.hadoop.fs.Path(model_grid_path))
     val model_matrix_offline_exists = fs.exists(new org.apache.hadoop.fs.Path(model_matrix_path))
@@ -88,12 +89,6 @@ object satellite_model_svd extends App {
       model_matrix_offline_mode = model_matrix_offline_exists
     }
 
-    var model_skip_rdd = false
-    if (model_matrix_offline_exists) {
-      println("Since we have a matrix, the load of the grids RDD will be skipped!!!")
-      model_skip_rdd = true
-    }
-
     if (satellite_rdd_offline_mode != satellite_rdd_offline_exists) {
       println("\"Load GeoTiffs\" offline mode is not set properly, i.e., either it was set to false and the required file does not exist or vice-versa. We will reset it to " + satellite_rdd_offline_exists.toString())
       satellite_rdd_offline_mode = satellite_rdd_offline_exists
@@ -104,18 +99,12 @@ object satellite_model_svd extends App {
       satellite_matrix_offline_mode = satellite_matrix_offline_exists
     }
 
-    var satellite_skip_rdd = false
-    if (satellite_matrix_offline_exists) {
-      println("Since we have a matrix, the load of the grids RDD will be skipped!!!")
-      satellite_skip_rdd = true
-    }
-
     var corr_tif = out_path + "_" + satellite_dir + "_" + model_dir + ".tif"
     var corr_tif_tmp = "/tmp/svd_" + satellite_dir + "_" + model_dir + ".tif"
 
     //Years
-    val satellite_years = 1980 to 2015
-    val model_years = 1989 to 2014
+    val model_years = 1980 to 2015
+    val satellite_years = 1989 to 2014
 
     if (!satellite_years.contains(satellite_first_year) || !(satellite_years.contains(satellite_last_year))) {
       println("Invalid range of years for " + satellite_dir + ". I should be between " + satellite_first_year + " and " + satellite_last_year)
@@ -177,7 +166,7 @@ object satellite_model_svd extends App {
     t0 = System.nanoTime()
 
     //Load Mask
-    if (!(model_skip_rdd && satellite_skip_rdd) && toBeMasked) {
+    if (toBeMasked) {
       val mask_tiles_RDD = sc.hadoopGeoTiffRDD(mask_path).values
       val mask_tiles_withIndex = mask_tiles_RDD.zipWithIndex().map { case (e, v) => (v, e) }
       mask_tile0 = (mask_tiles_withIndex.filter(m => m._1 == 0).filter(m => !m._1.isNaN).values.collect()) (0)
@@ -192,137 +181,139 @@ object satellite_model_svd extends App {
     println("Elapsed time: " + (t1 - t0) + "ns")
 
     t0 = System.nanoTime()
-    if (!satellite_skip_rdd) {
-      if (satellite_rdd_offline_mode) {
-        satellite_grids_RDD = sc.objectFile(satellite_grid_path)
+    if (satellite_rdd_offline_mode) {
+      satellite_grids_RDD = sc.objectFile(satellite_grid_path)
+    } else {
+      //Lets load MODIS Singleband GeoTiffs and return RDD just with the tiles.
+      val satellite_geos_RDD = sc.hadoopGeoTiffRDD(satellite_filepath, pattern)
+      val satellite_tiles_RDD = satellite_geos_RDD.values
+
+      if (toBeMasked) {
+        val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
+        satellite_grids_RDD = satellite_tiles_RDD.map(m => m.localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000))
       } else {
-        //Lets load MODIS Singleband GeoTiffs and return RDD just with the tiles.
-        val satellite_geos_RDD = sc.hadoopGeoTiffRDD(satellite_filepath, pattern)
-        val satellite_tiles_RDD = satellite_geos_RDD.values
-
-        if (toBeMasked) {
-          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
-          satellite_grids_RDD = satellite_tiles_RDD.map(m => m.localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000))
-        } else {
-          satellite_grids_RDD = satellite_tiles_RDD.map(m => m.toArrayDouble())
-        }
-
-        //Store in HDFS
-        if (save_rdds) {
-          satellite_grids_RDD.saveAsObjectFile(satellite_grid_path)
-        }
+        satellite_grids_RDD = satellite_tiles_RDD.map(m => m.toArrayDouble())
       }
-      val satellite_grids_withIndex = satellite_grids_RDD.zipWithIndex().map { case (e, v) => (v, e) }
 
-      //Filter out the range of years:
-      satellite_grids = satellite_grids_withIndex.filterByRange(satellite_years_range._1, satellite_years_range._2).values
-
-      //Collect Stats:
-      //satellite_summary = Statistics.colStats(satellite_grids.map(m => Vectors.dense(m)))
-      //satellite_std = satellite_summary.variance.toArray.map(m => scala.math.sqrt(m))
-
-      var satellite_grid0_index: RDD[Double] = satellite_grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m)
-      satellite_cells_size = satellite_grid0_index.count().toInt
-      println("Number of cells is: " + satellite_cells_size)
+      //Store in HDFS
+      if (save_rdds) {
+        satellite_grids_RDD.saveAsObjectFile(satellite_grid_path)
+      }
     }
+    val satellite_grids_withIndex = satellite_grids_RDD.zipWithIndex().map { case (e, v) => (v, e) }
+
+    //Filter out the range of years:
+    satellite_grids = satellite_grids_withIndex.filterByRange(satellite_years_range._1, satellite_years_range._2).values
+    satellite_grids.persist(StorageLevel.DISK_ONLY)
+
+    //Collect Stats:
+    satellite_summary = Statistics.colStats(satellite_grids.map(m => Vectors.dense(m)))
+    satellite_std = satellite_summary.variance.toArray.map(m => scala.math.sqrt(m))
+
+    var satellite_grid0_index: RDD[Double] = satellite_grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m)
+    satellite_cells_size = satellite_grid0_index.count().toInt
+    println("Number of cells is: " + satellite_cells_size)
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
     t0 = System.nanoTime()
-    if (!model_skip_rdd) {
-      if (model_rdd_offline_mode) {
-        model_grids_RDD = sc.objectFile(model_grid_path)
-        model_grid0 = sc.objectFile(model_grid0_path)
-        model_grid0_index = sc.objectFile(model_grid0_index_path)
-        val metadata = sc.sequenceFile(metadata_path, classOf[IntWritable], classOf[BytesWritable]).map(_._2.copyBytes()).collect()
-        projected_extent = deserialize(metadata(0)).asInstanceOf[ProjectedExtent]
-        num_cols_rows = (deserialize(metadata(1)).asInstanceOf[Int], deserialize(metadata(2)).asInstanceOf[Int])
-        cellT = deserialize(metadata(3)).asInstanceOf[CellType]
+    if (model_rdd_offline_mode) {
+      model_grids_RDD = sc.objectFile(model_grid_path)
+      model_grid0 = sc.objectFile(model_grid0_path)
+      model_grid0_index = sc.objectFile(model_grid0_index_path)
+      val metadata = sc.sequenceFile(metadata_path, classOf[IntWritable], classOf[BytesWritable]).map(_._2.copyBytes()).collect()
+      projected_extent = deserialize(metadata(0)).asInstanceOf[ProjectedExtent]
+      num_cols_rows = (deserialize(metadata(1)).asInstanceOf[Int], deserialize(metadata(2)).asInstanceOf[Int])
+      cellT = deserialize(metadata(3)).asInstanceOf[CellType]
+    } else {
+      val model_geos_RDD = sc.hadoopMultibandGeoTiffRDD(model_filepath, pattern)
+      val model_tiles_RDD = model_geos_RDD.values
+
+      //Retrieve the number of cols and rows of the Tile's grid
+      val tiles_withIndex = model_tiles_RDD.zipWithIndex().map { case (v, i) => (i, v) }
+      val tile0 = (tiles_withIndex.filter(m => m._1 == 0).values.collect()) (0)
+
+      num_cols_rows = (tile0.cols, tile0.rows)
+      cellT = tile0.cellType
+
+      //Retrieve the ProjectExtent which contains metadata such as CRS and bounding box
+      val projected_extents_withIndex = model_geos_RDD.keys.zipWithIndex().map { case (e, v) => (v, e) }
+      projected_extent = (projected_extents_withIndex.filter(m => m._1 == 0).values.collect()) (0)
+
+      val band_numB: Broadcast[Int] = sc.broadcast(band_num)
+      if (toBeMasked) {
+        val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
+        grids_RDD = model_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())
       } else {
-        val model_geos_RDD = sc.hadoopMultibandGeoTiffRDD(model_filepath, pattern)
-        val model_tiles_RDD = model_geos_RDD.values
-
-        //Retrieve the number of cols and rows of the Tile's grid
-        val tiles_withIndex = model_tiles_RDD.zipWithIndex().map { case (v, i) => (i, v) }
-        val tile0 = (tiles_withIndex.filter(m => m._1 == 0).values.collect()) (0)
-
-        num_cols_rows = (tile0.cols, tile0.rows)
-        cellT = tile0.cellType
-
-        //Retrieve the ProjectExtent which contains metadata such as CRS and bounding box
-        val projected_extents_withIndex = model_geos_RDD.keys.zipWithIndex().map { case (e, v) => (v, e) }
-        projected_extent = (projected_extents_withIndex.filter(m => m._1 == 0).values.collect()) (0)
-
-        val band_numB: Broadcast[Int] = sc.broadcast(band_num)
-        if (toBeMasked) {
-          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
-          grids_RDD = model_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())
-        } else {
-          grids_RDD = model_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble())
-        }
-
-        //Get Index for each Cell
-        val grids_withIndex = grids_RDD.zipWithIndex().map { case (e, v) => (v, e) }
-        if (toBeMasked) {
-          model_grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.filter(m => m._1 != -1000.0).map { case (v, i) => (i) }
-        } else {
-          model_grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.map { case (v, i) => (i) }
-        }
-
-        //Get the Tile's grid
-        model_grid0 = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.map { case (v, i) => (i, v) }
-
-        //Lets filter out NaN
-        if (toBeMasked) {
-          model_grids_RDD = grids_RDD.map(m => m.filter(m => m != -1000.0))
-        } else {
-          model_grids_RDD = grids_RDD
-        }
-
-        //Store data in HDFS
-        model_grids_RDD.saveAsObjectFile(model_grid_path)
-        model_grid0.saveAsObjectFile(model_grid0_path)
-        model_grid0_index.saveAsObjectFile(model_grid0_index_path)
-
-        val writer: SequenceFile.Writer = SequenceFile.createWriter(conf,
-          Writer.file(metadata_path),
-          Writer.keyClass(classOf[IntWritable]),
-          Writer.valueClass(classOf[BytesWritable])
-        )
-
-        writer.append(new IntWritable(1), new BytesWritable(serialize(projected_extent)))
-        writer.append(new IntWritable(2), new BytesWritable(serialize(num_cols_rows._1)))
-        writer.append(new IntWritable(3), new BytesWritable(serialize(num_cols_rows._2)))
-        writer.append(new IntWritable(4), new BytesWritable(serialize(cellT)))
-        writer.hflush()
-        writer.close()
+        grids_RDD = model_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble())
       }
-      val model_grids_withIndex = model_grids_RDD.zipWithIndex().map { case (e, v) => (v, e) }
 
-      //Filter out the range of years:
-      model_grids = model_grids_withIndex.filterByRange(model_years_range._1, model_years_range._2).values
+      //Get Index for each Cell
+      val grids_withIndex = grids_RDD.zipWithIndex().map { case (e, v) => (v, e) }
+      if (toBeMasked) {
+        model_grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.filter(m => m._1 != -1000.0).map { case (v, i) => (i) }
+      } else {
+        model_grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.map { case (v, i) => (i) }
+      }
 
-      //Collect Stats:
-      model_summary = Statistics.colStats(model_grids.map(m => Vectors.dense(m)))
-      //model_std = model_summary.variance.toArray.map(m => scala.math.sqrt(m))
+      //Get the Tile's grid
+      model_grid0 = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.map { case (v, i) => (i, v) }
 
-      var model_tile0_index: RDD[Double] = model_grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m)
-      model_cells_size = model_tile0_index.count().toInt
+      //Lets filter out NaN
+      if (toBeMasked) {
+        model_grids_RDD = grids_RDD.map(m => m.filter(m => m != -1000.0))
+      } else {
+        model_grids_RDD = grids_RDD
+      }
+
+      //Store data in HDFS
+      model_grids_RDD.saveAsObjectFile(model_grid_path)
+      model_grid0.saveAsObjectFile(model_grid0_path)
+      model_grid0_index.saveAsObjectFile(model_grid0_index_path)
+
+      val writer: SequenceFile.Writer = SequenceFile.createWriter(conf,
+        Writer.file(metadata_path),
+        Writer.keyClass(classOf[IntWritable]),
+        Writer.valueClass(classOf[BytesWritable])
+      )
+
+      writer.append(new IntWritable(1), new BytesWritable(serialize(projected_extent)))
+      writer.append(new IntWritable(2), new BytesWritable(serialize(num_cols_rows._1)))
+      writer.append(new IntWritable(3), new BytesWritable(serialize(num_cols_rows._2)))
+      writer.append(new IntWritable(4), new BytesWritable(serialize(cellT)))
+      writer.hflush()
+      writer.close()
     }
+    val model_grids_withIndex = model_grids_RDD.zipWithIndex().map { case (e, v) => (v, e) }
+
+    //Filter out the range of years:
+    model_grids = model_grids_withIndex.filterByRange(model_years_range._1, model_years_range._2).values
+    model_grids.persist()
+
+    //Collect Stats:
+    model_summary = Statistics.colStats(model_grids.map(m => Vectors.dense(m)))
+    //model_std = model_summary.variance.toArray.map(m => scala.math.sqrt(m))
+
+    var model_tile0_index: RDD[Double] = model_grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m)
+    model_cells_size = model_tile0_index.count().toInt
+
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
-    val satellite_cells_sizeB = sc.broadcast(satellite_cells_size)
+    //Satellite
+    val satellite_cells_sizeB = sc.broadcast(num_cols_rows._2)
     val satellite_mat: RowMatrix = new RowMatrix(satellite_grids.map(m => m.zipWithIndex).map(m => m.filter(!_._1.isNaN)).map(m => Vectors.sparse(satellite_cells_sizeB.value.toInt, m.map(v => v._2), m.map(v => v._1))))
+
     // Split the matrix into one number per line.
     val sat_byColumnAndRow = satellite_mat.rows.zipWithIndex.map {
       case (row, rowIndex) => row.toArray.zipWithIndex.map {
         case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, number)
       }
     }.flatMap(x => x)
-    val statellite_coordMatrix: BlockMatrix = new CoordinateMatrix(sat_byColumnAndRow)
+    val satellite_blockMatrix: BlockMatrix = new CoordinateMatrix(sat_byColumnAndRow).toBlockMatrix()
 
-    val satellite_M_1_Gc = sc.parallelize(satellite_summary.mean.toArray).map(m => Vectors.dense(m))
+    //SC
+    val satellite_M_1_Gc = sc.parallelize(Array[Vector](satellite_summary.mean)).map(m => Vectors.dense(m.toArray))
     val satellite_M_1_Gc_RowM: RowMatrix = new RowMatrix(satellite_M_1_Gc)
     val sat_M_1_Gc_byColumnAndRow = satellite_M_1_Gc_RowM.rows.zipWithIndex.map {
       case (row, rowIndex) => row.toArray.zipWithIndex.map {
@@ -331,31 +322,38 @@ object satellite_model_svd extends App {
     }.flatMap(x => x)
     val satellite_M_1_Gc_blockMatrix = new CoordinateMatrix(sat_M_1_Gc_byColumnAndRow).toBlockMatrix()
 
-    val satellite_M_1_Nt = sc.parallelize(new Array[Double](num_cols_rows._2)(1)).map(m => Vectors.dense(m))
-    val satellite_M_1_Nt_RowM: RowMatrix = new RowMatrix(satellite_M_1_Nt)
-    val sat_M_1_Nt_byColumnAndRow = satellite_M_1_Nt_RowM.rows.zipWithIndex.map {
+    val sat_matrix_Nt_1 = new Array[Double](satellite_grids.count().toInt)
+    satellite_grids.unpersist(false)
+    for (i <- 0 until sat_matrix_Nt_1.length)
+      sat_matrix_Nt_1(i) = 1
+    val satellite_M_Nt_1 = sc.parallelize(sat_matrix_Nt_1).map(m => Vectors.dense(m))
+    val satellite_M_Nt_1_RowM: RowMatrix = new RowMatrix(satellite_M_Nt_1)
+    val sat_M_Nt_1_byColumnAndRow = satellite_M_Nt_1_RowM.rows.zipWithIndex.map {
       case (row, rowIndex) => row.toArray.zipWithIndex.map {
         case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, number)
       }
     }.flatMap(x => x)
-    val satellite_M_Nt_1_blockMatrix = new CoordinateMatrix(sat_M_1_Nt_byColumnAndRow).transpose().toBlockMatrix()
-
+    val satellite_M_Nt_1_blockMatrix = new CoordinateMatrix(sat_M_Nt_1_byColumnAndRow).toBlockMatrix()
     val satellite_M_Nt_Gc_blockMatrix = satellite_M_Nt_1_blockMatrix.multiply(satellite_M_1_Gc_blockMatrix)
 
     val Sc = satellite_blockMatrix.subtract(satellite_M_Nt_Gc_blockMatrix)
+    Sc.persist(StorageLevel.MEMORY_AND_DISK)
 
+
+    //Model
     val model_cells_sizeB = sc.broadcast(model_cells_size)
     val model_mat: RowMatrix = new RowMatrix(model_grids.map(m => m.zipWithIndex).map(m => m.filter(!_._1.isNaN)).map(m => Vectors.sparse(model_cells_sizeB.value.toInt, m.map(v => v._2), m.map(v => v._1))))
+
     // Split the matrix into one number per line.
     val mod_byColumnAndRow = model_mat.rows.zipWithIndex.map {
       case (row, rowIndex) => row.toArray.zipWithIndex.map {
         case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, number)
       }
     }.flatMap(x => x)
+    val model_blockMatrix: BlockMatrix = new CoordinateMatrix(mod_byColumnAndRow).transpose().toBlockMatrix()
 
-    val model_coordMatrix: BlockMatrix = new CoordinateMatrix(mod_byColumnAndRow).transpose()
-
-    val model_M_1_Gc = sc.parallelize(model_summary.mean.toArray).map(m => Vectors.dense(m))
+    //MC
+    val model_M_1_Gc = sc.parallelize(Array[Vector](model_summary.mean)).map(m => Vectors.dense(m.toArray))
     val model_M_1_Gc_RowM: RowMatrix = new RowMatrix(model_M_1_Gc)
     val mod_M_1_Gc_byColumnAndRow = model_M_1_Gc_RowM.rows.zipWithIndex.map {
       case (row, rowIndex) => row.toArray.zipWithIndex.map {
@@ -364,22 +362,33 @@ object satellite_model_svd extends App {
     }.flatMap(x => x)
     val model_M_Gc_1_blockMatrix = new CoordinateMatrix(mod_M_1_Gc_byColumnAndRow).transpose().toBlockMatrix()
 
-    val model_M_1_Nt = sc.parallelize(new Array[Double](num_cols_rows._2)(1)).map(m => Vectors.dense(m))
-    val model_M_1_Nt_RowM: RowMatrix = new RowMatrix(model_M_1_Nt)
-    val mod_M_1_Nt_byColumnAndRow = model_M_1_Nt_RowM.rows.zipWithIndex.map {
+    val model_matrix_Nt_1 = new Array[Double](model_grids.count().toInt)
+    model_grids.unpersist(false)
+    for (i <- 0 until model_matrix_Nt_1.length)
+      model_matrix_Nt_1(i) = 1
+    val model_M_Nt_1 = sc.parallelize(model_matrix_Nt_1).map(m => Vectors.dense(m))
+    val model_M_Nt_1_RowM: RowMatrix = new RowMatrix(model_M_Nt_1)
+    val mod_M_Nt_1_byColumnAndRow = model_M_Nt_1_RowM.rows.zipWithIndex.map {
       case (row, rowIndex) => row.toArray.zipWithIndex.map {
         case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, number)
       }
     }.flatMap(x => x)
-    val model_M_1_Nt_blockMatrix = new CoordinateMatrix(mod_M_1_Nt_byColumnAndRow).toBlockMatrix()
+    val model_M_Nt_1_blockMatrix = new CoordinateMatrix(mod_M_Nt_1_byColumnAndRow).toBlockMatrix()
+    val model_M_Gc_Nt_blockMatrix = model_M_Gc_1_blockMatrix.multiply(model_M_Nt_1_blockMatrix)
+    val model_M_Nt_Gc_blockMatrix = model_M_Gc_Nt_blockMatrix.transpose
+    val Mc = model_blockMatrix.subtract(model_M_Gc_Nt_blockMatrix)
+    Mc.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val mode_M_Gc_Nt_blockMatrix = model_M_Gc_1_blockMatrix.multiply(model_M_1_Nt_blockMatrix)
-
-    val Mc = model_blockMatrix.subtract(mode_M_Gc_Nt_blockMatrix)
-
-    //val matrix_mul = statellite_blockMatrix.multiply(model_blockMatrix)
+    //Matrix Multiplication
+    //val matrix_mul = model_blockMatrix.multiply(satellite_blockMatrix)
     val matrix_mul = Mc.multiply(Sc)
+    println(Mc.numColBlocks + " " + Mc.colsPerBlock)
+    println(Mc.numRowBlocks + " " + Mc.rowsPerBlock)
+    println(Sc.numColBlocks + " " + Sc.colsPerBlock)
+    println(Sc.numRowBlocks + " " + Sc.rowsPerBlock)
 
+
+    //SVD
     val resRowMatrix: RowMatrix = new RowMatrix(matrix_mul.toIndexedRowMatrix().rows.sortBy(_.index).map(_.vector))
 
     val svd: SingularValueDecomposition[RowMatrix, Matrix] = resRowMatrix.computeSVD(10, true)
@@ -388,6 +397,8 @@ object satellite_model_svd extends App {
     val s: Vector = svd.s // The singular values are stored in a local dense vector.
     val V: Matrix = svd.V // The V factor is a local dense matrix.
 
+
+    //BUILD GEOTIFFS
     //Merge two RDDs, one containing the clusters_ID indices and the other one the indices of a Tile's grid cells
     val multi_res = sc.parallelize(s.toArray).zipWithIndex().map { case (v, i) => (i, v) }
     val multi_cell_pos = multi_res.join(model_grid0_index.zipWithIndex().map { case (v, i) => (i, v) }).map { case (k, (v, i)) => (v, i) }
