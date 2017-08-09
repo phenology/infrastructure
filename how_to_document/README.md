@@ -20,7 +20,8 @@ Please see below our living collection of *"how to ...?"* questions, mostly link
 4. push the *commmit* buttom at the bottom of the page (eventually you can also add a commit message here)  
 
 * How to create a new folder and a README.md file in bash+git?
-1. blablabla
+1. `mkdir NAMEOFFOLDER`
+2. `touch NAMEOFFOLDER/README.md`
 
 * How to write markdown files? <br>
 Markdown is a simple layout language to give format to text. 
