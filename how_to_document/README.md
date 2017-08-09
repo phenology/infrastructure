@@ -6,9 +6,9 @@ Please see below our living collection of *"how to ...?"* questions, mostly link
 
 * How to start documenting a new project task (dataset, analysis)?
 1. Go to the right github repository 
-2. Do a `git pull` to make sure that you have the latest version of this repository
 3. Do a `git status` to double check your current branch
 4. if not in the *master* branch, go to it by using: `git checkout master`
+2. Do a `git pull` to make sure that you have the latest version of this repository
 5. Create a new (local) branch to start documenting a specific dataset and/or analysis: `git checkout -b NAMEOFBRANCH`   
 6. Synchronize the local and github repositories by: `git push -u origin NAMEOFBRANCH`   
 7. create a folder -ideally with the name of the branch- and a README.md file in it  
