@@ -12,10 +12,7 @@ To run Jupyter Notebooks we use Jupyter Hub. For a compressive tutorial in how t
 Under the directory [jupyter_notebooks](./notebooks/) several templates can be found for different kernels. They contain examples in how GeoTiffs or HDF5 files are loaded as a **RDD**. They also show how to save results in different formats.
 
 ### Zeppelin NoteBooks
-<<<<<<< HEAD
-=======
 [Apache Zeppelin](https://zeppelin.apache.org/) is a web-based notebook that enables data-driven, interactive data analytics and collaborative documents with R, Python, Scala and more. The following [instructions](https://zeppelin.apache.org/docs/0.7.2/interpreter/spark.html) will explain you how to setup Zeppelin with the Spark.
->>>>>>> 075fa238cf48fc6ebde09990f9e8a7902d2e7b06
 
 ## IDEs
 
