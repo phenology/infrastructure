@@ -1,3 +1,3 @@
-Information to get the code working on PyCharm.
+# Information to get the code working on PyCharm.
 
 The following instructions assume you have PyCharm installed. It is also necessary to have Python 3.5 installed, we recomment to do it before installing PyCharm.
