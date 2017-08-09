@@ -11,17 +11,20 @@ Please see below our living collection of *"how to ...?"* questions, mostly link
 2. Do a `git pull` to make sure that you have the latest version of this repository
 5. Create a new (local) branch to start documenting a specific dataset and/or analysis: `git checkout -b NAMEOFBRANCH`   
 6. Synchronize the local and github repositories by: `git push -u origin NAMEOFBRANCH`   
-7. create a folder -ideally with the name of the branch- and a README.md file in it  
+7. Create a folder -ideally with the name of the branch- and a README.md file in it  
+  * in github  
+     1. Open github in your browser, go to the repository and branch where you want to work  
+     2. Click on *create new file*   
+     3. In the "prompt" type your folder name then */* and then README.md  
+     4. push the *commmit* buttom at the bottom of the page (eventually you can also add a commit message here)  
 
-* How to create a new folder and a README.md file in github?  
-1. Open github in your browser, go to the repository and branch where you want to work  
-2. Click on *create new file*   
-3. In the "prompt" type your folder name then */* and then README.md  
-4. push the *commmit* buttom at the bottom of the page (eventually you can also add a commit message here)  
+  * in bash+git
+    1. `mkdir NAMEOFFOLDER`
+    2. `touch NAMEOFFOLDER/README.md`
 
-* How to create a new folder and a README.md file in bash+git?
-1. `mkdir NAMEOFFOLDER`
-2. `touch NAMEOFFOLDER/README.md`
+8. Synchronize by
+    1. `git add NAMEOFFOLDER`
+    2. `git commit NAMEOFFOLDER -m "beginning of documentation"`
 
 * How to write markdown files? <br>
 Markdown is a simple layout language to give format to text. 
