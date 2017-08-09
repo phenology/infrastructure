@@ -1,6 +1,6 @@
 # Information to get the code working on IntelliJ IDEA.
 
-The following instructions assume you have IntelliJ installed, and its scala and sbt plugins installed. It is also necessary to have Java 1.8.0 installed, we recomment to do it before installing IntelliJ.
+The following instructions assume you have IntelliJ installed, and its scala and sbt plugins installed. It is also necessary to have Java 1.8.0 installed, we recommend to do it before installing IntelliJ.
 
 ## Create project
 1) In IntelliJ IDEA in **File** choose **Create Project from Existing Sources** and select the dir **ides/scala**. 

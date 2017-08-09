@@ -14,7 +14,7 @@ Under the directory [jupyter_notebooks](./notebooks/) several templates can be f
 ### Zeppelin NoteBooks
 <<<<<<< HEAD
 =======
-[Apache Zeppelin](https://zeppelin.apache.org/) is a web-based notebook that enables data-driven, interactive data analytics and collaborative documents with R, Python, Scala and more. The following [instructions](https://zeppelin.apache.org/docs/0.7.2/interpreter/spark.html) will explain you how to setup Zepplin with the Spark.
+[Apache Zeppelin](https://zeppelin.apache.org/) is a web-based notebook that enables data-driven, interactive data analytics and collaborative documents with R, Python, Scala and more. The following [instructions](https://zeppelin.apache.org/docs/0.7.2/interpreter/spark.html) will explain you how to setup Zeppelin with the Spark.
 >>>>>>> 075fa238cf48fc6ebde09990f9e8a7902d2e7b06
 
 ## IDEs
