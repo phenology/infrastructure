@@ -1,6 +1,6 @@
 # Applications
 
-The diretory contains examples and how-to's so the user can load data into the different storage layers and create applications to interact with the provided platform.
+This directory contains examples and how-to's so the user can load data into the different storage layers and create applications to interact with the provided platform. The examples we provide show how to set a Spark-Context for Scala and Python notebooks, read GeoTiff files from HDFS into RDDs, do cluster analysis using Kmeans algorithm from Spark MLlib, store Kmeans results into HDFS, plot/visualize GeoTiffs using **rasterio** Python package, etc.
 
 ## Data loading
 
