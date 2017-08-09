@@ -9,11 +9,11 @@ Please see below our living collection of *"how to ...?"* questions, mostly link
 2. Do a `git pull` to make sure that you have the latest version of this repository
 3. Do a `git status` to double check your current branch
 4. if not in the *master* branch, go to it by using: `git checkout master`
-5. Create a new branch to start documenting a specific dataset and/or analysis: `git checkout -b NAMEOFBRANCH` 
-  * Github <br>
+5. Create a new branch to start documenting a specific dataset and/or analysis: `git checkout -b NAMEOFBRANCH`   
+..* Github <br>
     a. Go back to github, create a folder -ideally with the name of the branch-, and a create a README.md file in it  
     b. start typing in the README file. Commit your changes   
-  * from Bash <br>
+..* from Bash <br>
     a. to be done  
 
 * How to create a new folder and a README.md file in github?  
