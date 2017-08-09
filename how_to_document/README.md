@@ -35,11 +35,11 @@ in GFM you can either use HTML `<br>` or you have to put *two* trailing spaces a
 * How to get the changes made in github (new files/documentation) to your local repository?  
 Simply do a `git pull` 
 
-* How to rename a folder in a repository?
+* How to rename a folder or a file in a repository?
 It is good practice to always use smallcase (file and folder names)
 1. Go out of the folder with capital letters (i.e. go one level up by simply typing `cd ..`)
 2. `git mv AVHRR avhrr`
-3. `git commit avhrr`
+3. `git commit avhrr -m "rename folder or file"`
 4. `git push`
 
 * How to add a new file to the repository?
@@ -48,6 +48,24 @@ It is good practice to always use smallcase (file and folder names)
 3. `git add FILENAME` use tab to autocomplete. Git knows that this file is not being tracked 
 4. `git commit FILENAME -m "MSG" `
 5. `git push`
+
+* How to merge a branch into the master branch?
+  * As owner of the branch:
+    1. Create a pull request using github with a summary of what the branch does
+    2. Assign a reviewer 
+    3. if any, solve the comments of the reviewer (ideally in a single commit per comment)
+    4. once the branch is merged into the master:
+      - `git checkout master` 
+      - `git pull`
+      - `git branch -d BRANCHNAME` (to remove/delete the branch)
+      
+  * As reviewer:
+    1. check the branch and give commnents (per commit or for all the branch)
+    2. any change to be done to the file(s), should be requested in those comments
+    3. once all the comments have been fixed by the owner:
+      - add a final comment indicating tha the branch is ready to be merged
+      - merge branch into the master and confirm the merge (using github buttons)
+      - delete branch (using github button)
 
 
 
