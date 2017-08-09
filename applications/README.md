@@ -78,3 +78,6 @@ Under the directory [jupyter_notebooks](./notebooks/) several templates can be f
 
 ### Zepplin NoteBooks
 
+## IDEs
+
+For code development it is handy to have an IDE for features such as auto-completion. For this project we have used two different IDEs from [JetBrains](https://www.jetbrains.com/), [pycharm](https://www.jetbrains.com/pycharm/) for python and [IntelliJ IDEA](https://www.jetbrains.com/idea/) for java and scala.
