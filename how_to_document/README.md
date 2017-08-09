@@ -35,6 +35,19 @@ in GFM you can either use HTML `<br>` or you have to put *two* trailing spaces a
 * How to get the changes made in github (new files/documentation) to your local repository?  
 Simply do a `git pull` 
 
+* How to rename a folder in a repository?
+It is good practice to always use smallcase (file and folder names)
+1. Go out of the folder with capital letters (i.e. go one level up by simply typing `cd ..`)
+2. `git mv AVHRR avhrr`
+3. `git commit avhrr`
+4. `git push`
+
+* How to add a new file to the repository?
+1. copy local file to the desired location in the local repository
+2. map to the location (i.e. to the folder where the file was just copied)
+3. `git add FILENAME` use tab to autocomplete. Git knows that this file is not being tracked 
+4. `git commit FILENAME -m "MSG" `
+5. `git push`
 
 
 
