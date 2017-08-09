@@ -32,7 +32,7 @@ For more info / get a quick reference, please check this [link](https://github.c
 in GFM you can either use HTML `<br>` or you have to put *two* trailing spaces at the end of your sentences
 (N.B. in the *source code* of this file you can find both examples)
 
-*How to get the changes made in github (new files/documentation) to your local repository?
+* How to get the changes made in github (new files/documentation) to your local repository?  
 Simply do a `git pull` 
 
 
