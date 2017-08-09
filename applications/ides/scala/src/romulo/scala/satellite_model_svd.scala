@@ -11,7 +11,7 @@ import org.apache.hadoop.io.SequenceFile.Writer
 import org.apache.hadoop.io.{SequenceFile, _}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.linalg.distributed.{BlockMatrix, CoordinateMatrix, MatrixEntry, RowMatrix}
+import org.apache.spark.mllib.linalg.distributed._
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -73,6 +73,9 @@ object satellite_model_svd extends App {
     var model_matrix_path = out_path + model_dir + "_matrix"
     var satellite_matrix_path = out_path + satellite_dir + "_matrix"
     var metadata_path = out_path + model_dir + "_metadata"
+
+    var sc_path = out_path + model_dir + "_sc"
+    var mc_path = out_path + model_dir + "_mc"
 
     val model_rdd_offline_exists = fs.exists(new org.apache.hadoop.fs.Path(model_grid_path))
     val model_matrix_offline_exists = fs.exists(new org.apache.hadoop.fs.Path(model_matrix_path))
@@ -313,30 +316,40 @@ object satellite_model_svd extends App {
     val satellite_blockMatrix: BlockMatrix = new CoordinateMatrix(sat_byColumnAndRow).toBlockMatrix()
 
     //SC
-    val satellite_M_1_Gc = sc.parallelize(Array[Vector](satellite_summary.mean)).map(m => Vectors.dense(m.toArray))
-    val satellite_M_1_Gc_RowM: RowMatrix = new RowMatrix(satellite_M_1_Gc)
-    val sat_M_1_Gc_byColumnAndRow = satellite_M_1_Gc_RowM.rows.zipWithIndex.map {
-      case (row, rowIndex) => row.toArray.zipWithIndex.map {
-        case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, number)
-      }
-    }.flatMap(x => x)
-    val satellite_M_1_Gc_blockMatrix = new CoordinateMatrix(sat_M_1_Gc_byColumnAndRow).toBlockMatrix()
+    val sc_exists = fs.exists(new org.apache.hadoop.fs.Path(sc_path))
+    var Sc :BlockMatrix = null
+    if (sc_exists) {
+      val rdd_indexed_rows :RDD[IndexedRow]= sc.objectFile(sc_path)
+      Sc = new IndexedRowMatrix(rdd_indexed_rows).toBlockMatrix()
+    } else {
+      val satellite_M_1_Gc = sc.parallelize(Array[Vector](satellite_summary.mean)).map(m => Vectors.dense(m.toArray))
+      val satellite_M_1_Gc_RowM: RowMatrix = new RowMatrix(satellite_M_1_Gc)
+      val sat_M_1_Gc_byColumnAndRow = satellite_M_1_Gc_RowM.rows.zipWithIndex.map {
+        case (row, rowIndex) => row.toArray.zipWithIndex.map {
+          case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, number)
+        }
+      }.flatMap(x => x)
+      val satellite_M_1_Gc_blockMatrix = new CoordinateMatrix(sat_M_1_Gc_byColumnAndRow).toBlockMatrix()
 
-    val sat_matrix_Nt_1 = new Array[Double](satellite_grids.count().toInt)
-    satellite_grids.unpersist(false)
-    for (i <- 0 until sat_matrix_Nt_1.length)
-      sat_matrix_Nt_1(i) = 1
-    val satellite_M_Nt_1 = sc.parallelize(sat_matrix_Nt_1).map(m => Vectors.dense(m))
-    val satellite_M_Nt_1_RowM: RowMatrix = new RowMatrix(satellite_M_Nt_1)
-    val sat_M_Nt_1_byColumnAndRow = satellite_M_Nt_1_RowM.rows.zipWithIndex.map {
-      case (row, rowIndex) => row.toArray.zipWithIndex.map {
-        case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, number)
-      }
-    }.flatMap(x => x)
-    val satellite_M_Nt_1_blockMatrix = new CoordinateMatrix(sat_M_Nt_1_byColumnAndRow).toBlockMatrix()
-    val satellite_M_Nt_Gc_blockMatrix = satellite_M_Nt_1_blockMatrix.multiply(satellite_M_1_Gc_blockMatrix)
+      val sat_matrix_Nt_1 = new Array[Double](satellite_grids.count().toInt)
+      satellite_grids.unpersist(false)
+      for (i <- 0 until sat_matrix_Nt_1.length)
+        sat_matrix_Nt_1(i) = 1
+      val satellite_M_Nt_1 = sc.parallelize(sat_matrix_Nt_1).map(m => Vectors.dense(m))
+      val satellite_M_Nt_1_RowM: RowMatrix = new RowMatrix(satellite_M_Nt_1)
+      val sat_M_Nt_1_byColumnAndRow = satellite_M_Nt_1_RowM.rows.zipWithIndex.map {
+        case (row, rowIndex) => row.toArray.zipWithIndex.map {
+          case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, number)
+        }
+      }.flatMap(x => x)
+      val satellite_M_Nt_1_blockMatrix = new CoordinateMatrix(sat_M_Nt_1_byColumnAndRow).toBlockMatrix()
+      val satellite_M_Nt_Gc_blockMatrix = satellite_M_Nt_1_blockMatrix.multiply(satellite_M_1_Gc_blockMatrix)
 
-    val Sc = satellite_blockMatrix.subtract(satellite_M_Nt_Gc_blockMatrix)
+      Sc = satellite_blockMatrix.subtract(satellite_M_Nt_Gc_blockMatrix)
+
+      //save to disk
+      Sc.toIndexedRowMatrix().rows.saveAsObjectFile(sc_path)
+    }
     Sc.persist(StorageLevel.MEMORY_AND_DISK)
 
 
@@ -353,44 +366,50 @@ object satellite_model_svd extends App {
     val model_blockMatrix: BlockMatrix = new CoordinateMatrix(mod_byColumnAndRow).transpose().toBlockMatrix()
 
     //MC
-    val model_M_1_Gc = sc.parallelize(Array[Vector](model_summary.mean)).map(m => Vectors.dense(m.toArray))
-    val model_M_1_Gc_RowM: RowMatrix = new RowMatrix(model_M_1_Gc)
-    val mod_M_1_Gc_byColumnAndRow = model_M_1_Gc_RowM.rows.zipWithIndex.map {
-      case (row, rowIndex) => row.toArray.zipWithIndex.map {
-        case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, number)
-      }
-    }.flatMap(x => x)
-    val model_M_Gc_1_blockMatrix = new CoordinateMatrix(mod_M_1_Gc_byColumnAndRow).transpose().toBlockMatrix()
+    val mc_exists = fs.exists(new org.apache.hadoop.fs.Path(mc_path))
+    var Mc :BlockMatrix = null
+    if (mc_exists) {
+      val rdd_indexed_rows :RDD[IndexedRow]= sc.objectFile(mc_path)
+      Mc = new IndexedRowMatrix(rdd_indexed_rows).toBlockMatrix()
+    } else {
+      val model_M_1_Gc = sc.parallelize(Array[Vector](model_summary.mean)).map(m => Vectors.dense(m.toArray))
+      val model_M_1_Gc_RowM: RowMatrix = new RowMatrix(model_M_1_Gc)
+      val mod_M_1_Gc_byColumnAndRow = model_M_1_Gc_RowM.rows.zipWithIndex.map {
+        case (row, rowIndex) => row.toArray.zipWithIndex.map {
+          case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, number)
+        }
+      }.flatMap(x => x)
+      val model_M_1_Gc_blockMatrix = new CoordinateMatrix(mod_M_1_Gc_byColumnAndRow).toBlockMatrix()
 
-    val model_matrix_Nt_1 = new Array[Double](model_grids.count().toInt)
-    model_grids.unpersist(false)
-    for (i <- 0 until model_matrix_Nt_1.length)
-      model_matrix_Nt_1(i) = 1
-    val model_M_Nt_1 = sc.parallelize(model_matrix_Nt_1).map(m => Vectors.dense(m))
-    val model_M_Nt_1_RowM: RowMatrix = new RowMatrix(model_M_Nt_1)
-    val mod_M_Nt_1_byColumnAndRow = model_M_Nt_1_RowM.rows.zipWithIndex.map {
-      case (row, rowIndex) => row.toArray.zipWithIndex.map {
-        case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, number)
-      }
-    }.flatMap(x => x)
-    val model_M_Nt_1_blockMatrix = new CoordinateMatrix(mod_M_Nt_1_byColumnAndRow).toBlockMatrix()
-    val model_M_Gc_Nt_blockMatrix = model_M_Gc_1_blockMatrix.multiply(model_M_Nt_1_blockMatrix)
-    val model_M_Nt_Gc_blockMatrix = model_M_Gc_Nt_blockMatrix.transpose
-    val Mc = model_blockMatrix.subtract(model_M_Gc_Nt_blockMatrix)
+      val model_matrix_Nt_1 = new Array[Double](model_grids.count().toInt)
+      model_grids.unpersist(false)
+
+      for (i <- 0 until model_matrix_Nt_1.length)
+        model_matrix_Nt_1(i) = 1
+      val model_M_Nt_1 = sc.parallelize(model_matrix_Nt_1).map(m => Vectors.dense(m))
+      val model_M_Nt_1_RowM: RowMatrix = new RowMatrix(model_M_Nt_1)
+      val mod_M_Nt_1_byColumnAndRow = model_M_Nt_1_RowM.rows.zipWithIndex.map {
+        case (row, rowIndex) => row.toArray.zipWithIndex.map {
+          case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, number)
+        }
+      }.flatMap(x => x)
+      val model_M_Nt_1_blockMatrix = new CoordinateMatrix(mod_M_Nt_1_byColumnAndRow).toBlockMatrix()
+      val model_M_Nt_Gc_blockMatrix = model_M_Nt_1_blockMatrix.multiply(model_M_1_Gc_blockMatrix)
+      val model_M_Gc_Nt_blockMatrix = model_M_Nt_Gc_blockMatrix.transpose
+      Mc = model_blockMatrix.subtract(model_M_Gc_Nt_blockMatrix)
+
+      //save to disk
+      Mc.toIndexedRowMatrix().rows.saveAsObjectFile(mc_path)
+    }
     Mc.persist(StorageLevel.MEMORY_AND_DISK)
 
     //Matrix Multiplication
     //val matrix_mul = model_blockMatrix.multiply(satellite_blockMatrix)
     val matrix_mul = Mc.multiply(Sc)
-    println(Mc.numColBlocks + " " + Mc.colsPerBlock)
-    println(Mc.numRowBlocks + " " + Mc.rowsPerBlock)
-    println(Sc.numColBlocks + " " + Sc.colsPerBlock)
-    println(Sc.numRowBlocks + " " + Sc.rowsPerBlock)
-
+    val resRowMatrix: RowMatrix = new RowMatrix(matrix_mul.toIndexedRowMatrix().rows.sortBy(_.index).map(_.vector))
+    matrix_mul.persist(StorageLevel.MEMORY_AND_DISK)
 
     //SVD
-    val resRowMatrix: RowMatrix = new RowMatrix(matrix_mul.toIndexedRowMatrix().rows.sortBy(_.index).map(_.vector))
-
     val svd: SingularValueDecomposition[RowMatrix, Matrix] = resRowMatrix.computeSVD(10, true)
 
     val U: RowMatrix = svd.U // The U factor is a RowMatrix.
