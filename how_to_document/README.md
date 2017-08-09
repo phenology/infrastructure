@@ -51,6 +51,7 @@ It is good practice to always use smallcase (file and folder names)
 
 * How to merge a branch into the master branch?
   * As owner of the branch:
+    1. Use `git merge master` to make sure that the branch is aligned with the contents of the master branch
     1. Create a pull request using github with a summary of what the branch does
     2. Assign a reviewer 
     3. if any, solve the comments of the reviewer (ideally in a single commit per comment)
