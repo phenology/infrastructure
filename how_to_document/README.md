@@ -9,18 +9,18 @@ Please see below our living collection of *"how to ...?"* questions, mostly link
 2. Do a `git pull` to make sure that you have the latest version of this repository
 3. Do a `git status` to double check your current branch
 4. if not in the *master* branch, go to it by using: `git checkout master`
-5. Create a new branch to start documenting a specific dataset and/or analysis: `git checkout -b NAMEOFBRANCH`   
-    * Github <br>
-        i. Go back to github, create a folder -ideally with the name of the branch-, and a create a README.md file in it  
-        ii. start typing in the README file. Commit your changes   
-    * from Bash <br>
-        i. to be done  
+5. Create a new (local) branch to start documenting a specific dataset and/or analysis: `git checkout -b NAMEOFBRANCH`   
+6. Synchronize the local and github repositories by: `git push -u origin NAMEOFBRANCH`   
+7. create a folder -ideally with the name of the branch- and a README.md file in it  
 
 * How to create a new folder and a README.md file in github?  
 1. Open github in your browser, go to the repository and branch where you want to work  
 2. Click on *create new file*   
 3. In the "prompt" type your folder name then */* and then README.md  
 4. push the *commmit* buttom at the bottom of the page (eventually you can also add a commit message here)  
+
+* How to create a new folder and a README.md file in bash+git?
+1. blablabla
 
 * How to write markdown files? <br>
 Markdown is a simple layout language to give format to text. 
@@ -31,7 +31,8 @@ For more info / get a quick reference, please check this [link](https://github.c
 in GFM you can either use HTML `<br>` or you have to put *two* trailing spaces at the end of your sentences
 (N.B. in the *source code* of this file you can find both examples)
 
-
+*How to get the changes made in github (new files/documentation) to your local repository?
+Simply do a `git pull` 
 
 
 
