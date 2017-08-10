@@ -1,7 +1,9 @@
-# How to ...
+# How to ...  
+
 Here we describe best practices to document our project.  
 Please see below our collection of *"how to ...?"* questions, mostly linked to the use of git and github, 
 where we use plain English to explain how to accomplish certain documentation related tasks.
+
 Table of Contents
 =================
 * [How to start documenting a new project task (dataset, analysis)?](#how-to-start-documenting-a-new-project-task-dataset-analysis)
