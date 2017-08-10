@@ -42,7 +42,7 @@ Simply do a `git pull`
 It is good practice to always use smallcase (file and folder names)
 1. Go out of the folder with capital letters (i.e. go one level up by simply typing `cd ..`)
 2. `git mv FOLDERNAME foldername`
-3. `git commit avhrr -m "rename folder or file"`
+3. `git commit foldername -m "rename folder or file"`
 4. `git push`
 
 * How to add a new file to the repository?
