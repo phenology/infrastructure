@@ -13,4 +13,4 @@ Before developing or deploying an application it is necessary to get the platfor
 
 
 ## Applications
-Once the platform is up and running and data available the user should use examples under [applications/notebooks](./applications/notebooks) to create new interactive applications. For easy development we provide examples and we explain how to load the code and dependencies into [**IDEs**](./applications/ides).
+Once the platform is up and running, and data available, the user can start developing and/or deploying [applications](applications). For development of a new application the user should use examples under [applications/notebooks](./applications/notebooks). For easy development there are examples and information in how to load the code and dependencies into [**IDEs**](./applications/ides).
