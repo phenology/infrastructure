@@ -2,17 +2,17 @@
 Here we describe best practices to document our project.  
 Please see below our collection of *"how to ...?"* questions, mostly linked to the use of git and github, 
 where we use plain English to explain how to accomplish certain documentation related tasks.
-
 Table of Contents
 =================
-* How to...
-* [start documenting a new project task (dataset, analysis)?](#how-to-start-documenting-a-new-project-task-dataset-analysis)
-* [write markdown files?](#how-to-write-markdown-files-)
-* [break the lines nicely?](#how-to-break-the-lines-nicely)
-* [get the changes made in github (new files/documentation) to your local repository?](#how-to-get-the-changes-made-in-github-new-filesdocumentation-to-your-local-repository)
-* [rename a folder or a file in a repository?](#how-to-rename-a-folder-or-a-file-in-a-repository)
-* [add a new file to the repository?](#how-to-add-a-new-file-to-the-repository)
-* [merge a branch into the master branch?](#how-to-merge-a-branch-into-the-master-branch)
+* [How to start documenting a new project task (dataset, analysis)?](#how-to-start-documenting-a-new-project-task-dataset-analysis)
+* [How to write markdown files? <br>](#how-to-write-markdown-files-)
+* [How to break lines in markdown files?](#how-to-break-lines-in-markdown-files)
+* [How to get the changes made in github (new files/documentation) to your local repository?](#how-to-get-the-changes-made-in-github-new-filesdocumentation-to-your-local-repository)
+* [How to rename a folder or a file in a repository?](#how-to-rename-a-folder-or-a-file-in-a-repository)
+* [How to add a new file to the repository?](#how-to-add-a-new-file-to-the-repository)
+* [How to merge a branch into the master branch?](#how-to-merge-a-branch-into-the-master-branch)
+* [How to create a table of contents?](#how-to-create-a-table-of-contents)
+
 ---------------
 
 ## How to start documenting a new project task (dataset, analysis)?
@@ -43,8 +43,8 @@ Markdown is a simple layout language to give format to text.
 Github uses a special form of markdown, simply called "Github-flavored markdown language" or GFM
 For more info / get a quick reference, please check this [link](https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet)
 
-## How to break the lines nicely?  
-in GFM you can either use HTML `<br>` or you have to put *two* trailing spaces at the end of your sentences
+## How to break lines in markdown files?  
+In GFM you can either use HTML `<br>` or you have to put *two* trailing spaces at the end of your sentences
 (N.B. in the *source code* of this file you can find both examples)
 
 ## How to get the changes made in github (new files/documentation) to your local repository?  
@@ -81,5 +81,16 @@ It is good practice to always use smallcase (file and folder names)
     3. once all the comments have been fixed by the owner:
       - add a final comment indicating tha the branch is ready to be merged
       - merge branch into the master and confirm the merge (using github buttons)
-      - delete branch (using github button)
-      
+      - delete branch (using github button)  
+	  
+ ## How to create a table of contents?
+ Here we describe the lazy way of doing this (and this is how the TOC of this README file was created).  
+ Go to this [link](https://github.com/ekalinin/github-markdown-toc), and follow the installation instructions to get *gh-md-toc*
+ In your bash console (this only works in Ubuntu/Linux systems) type (adjust your path as needed):
+  
+ `./gh-md-toc ../infrastructure/how_to_document/README.md` 
+ 
+ Then copy/paste the result from console into your original README.md file.
+ NB: do not forget to commit and push the file to the repository
+ NB: if you need to create the TOC again, it is better to remove the "old TOC" from the file before calling *gh-md-toc* again ;-)
+ 
