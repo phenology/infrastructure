@@ -20,7 +20,7 @@ Please see below our living collection of *"how to ...?"* questions, mostly link
 
   * in bash+git
     1. `mkdir NAMEOFFOLDER`
-    2. `touch NAMEOFFOLDER/README.md`
+    2. `touch NAMEOFFOLDER/README.md` (NB: For more info about *touch* see [this](http://www.linfo.org/touch.html))
 
 8. Synchronize by
     1. `git add NAMEOFFOLDER`
@@ -41,7 +41,7 @@ Simply do a `git pull`
 * How to rename a folder or a file in a repository?
 It is good practice to always use smallcase (file and folder names)
 1. Go out of the folder with capital letters (i.e. go one level up by simply typing `cd ..`)
-2. `git mv AVHRR avhrr`
+2. `git mv FOLDERNAME foldername`
 3. `git commit avhrr -m "rename folder or file"`
 4. `git push`
 
@@ -70,7 +70,4 @@ It is good practice to always use smallcase (file and folder names)
       - add a final comment indicating tha the branch is ready to be merged
       - merge branch into the master and confirm the merge (using github buttons)
       - delete branch (using github button)
-
-
-
-
+      
