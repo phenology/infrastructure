@@ -87,8 +87,8 @@ It is good practice to always use smallcase (file and folder names)
 	  
  ## How to create a table of contents?
  Here we describe the lazy way of doing this (and this is how the TOC of this README file was created).  
- Go to this [link](https://github.com/ekalinin/github-markdown-toc), and follow the installation instructions to get *gh-md-toc*
- In your bash console (this only works in Ubuntu/Linux systems) type (adjust your path as needed):
+ Go to this [link](https://github.com/ekalinin/github-markdown-toc), and follow the installation instructions to get *gh-md-toc*.  
+ In your bash console (this only works in Ubuntu/Linux systems), type the following (adjust your path as needed):
   
  `./gh-md-toc ../infrastructure/how_to_document/README.md` 
  
