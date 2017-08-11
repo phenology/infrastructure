@@ -10,3 +10,7 @@ To update the module and merge changes do:
 ```
 git submodule update --remote --merge
 ```
+
+Make sure you have the ssh url and not the https url, otherwise, the 2 phase-login will give your troubles.
+Then create a new branch and push it to the repository as we would do directly in a normal clone of the repository.
+
