@@ -29,8 +29,8 @@ Table of Contents
   * in github  
      1. Open github in your browser, go to the repository and branch where you want to work  
      2. Click on *create new file*   
-     3. In the "prompt" type your folder name then */* and then README.md  
-     4. push the *commmit* buttom at the bottom of the page (eventually you can also add a commit message here)  
+     3. In the "prompt" type your folder name then */* and then type a FILENAME, for example README.md  
+     4. push the *commmit* buttom at the bottom of the page and do not forget to use an informative (i.e. what and why) commit message  
 
   * in bash+git
     1. `mkdir NAMEOFFOLDER`
