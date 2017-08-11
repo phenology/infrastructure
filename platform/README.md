@@ -17,22 +17,6 @@ The owner will email a zip folder with all the configuration parameters. Unzip t
 
 * To install the platform the user should read the instructions detailed in [**emma's** set up](https://github.com/nlesc-sherlock/emma/blob/master/README.md#setup-environment). This assumes that you use an Ubuntu machine or that you have Windows 10 with [**WSL**](https://msdn.microsoft.com/en-us/commandline/wsl/install_guide). If not, go to [**emma's** README](https://github.com/nlesc-sherlock/emma/blob/master/README.md).  
 
-
-**For this project the platform provision should only install a light version of the platform**. Such light platform does not have Docker-swarm and GlusterFS. To install such platform the user instead of running **ansible-playbook install_platform.yml**, as mentioned in [provision section](https://github.com/nlesc-sherlock/emma/blob/documentation/ansible.md#provision), the user should run the following:
-```
-ansible-playbook playbooks/install_spark.yml
-```
-
-The platform only needs to be installed once. Once it is installed the services, e.g., Hadoop and Spark, are started using the following command:
-```
-ansible-playbook start_platform.yml
-```
-
-To shutdown the platform just run the following command:
-```
-ansible-playbook shutdown_platform.yml
-```
-
 ## Data loading
 The platform provides two storage levels, a block-based storage through Hadoop Distributed FileSystem (HDFS) and a object-based sotrage through Minio.
 
