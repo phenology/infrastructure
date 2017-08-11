@@ -1,0 +1,9 @@
+In minutes how much each cell takes.
+kmeans, kmeans_light
+
+21.7, 12.0    <--- read geoTiffs
+10.8, 27.1    <--- Matrix transpose
+24.6, 53.6    <--- Kmeans training (14 clusters: 1.7, 3.8 per cluster) 
+0.002, 0.002  <--- Kmeans predict
+, 10.76       <--- Build GeoTiffs  (14 clusters: , 46 secs per cluster)
+
