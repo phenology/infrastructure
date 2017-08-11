@@ -350,7 +350,7 @@ object satellite_model_svd extends App {
       //save to disk
       Sc.toIndexedRowMatrix().rows.saveAsObjectFile(sc_path)
     }
-    Sc.persist(StorageLevel.MEMORY_AND_DISK)
+    Sc.persist(StorageLevel.DISK_ONLY)
 
 
     //Model
@@ -401,21 +401,25 @@ object satellite_model_svd extends App {
       //save to disk
       Mc.toIndexedRowMatrix().rows.saveAsObjectFile(mc_path)
     }
-    Mc.persist(StorageLevel.MEMORY_AND_DISK)
+    Mc.persist(StorageLevel.DISK_ONLY)
 
     //Matrix Multiplication
     //val matrix_mul = model_blockMatrix.multiply(satellite_blockMatrix)
     val matrix_mul = Mc.multiply(Sc)
-    val resRowMatrix: RowMatrix = new RowMatrix(matrix_mul.toIndexedRowMatrix().rows.sortBy(_.index).map(_.vector))
-    matrix_mul.persist(StorageLevel.MEMORY_AND_DISK)
+    matrix_mul.persist(StorageLevel.DISK_ONLY)
+    //val resRowMatrix: RowMatrix = new RowMatrix(matrix_mul.toIndexedRowMatrix().rows.sortBy(_.index).map(_.vector))
+    println(matrix_mul.colsPerBlock + " " + matrix_mul.colsPerBlock + " " + matrix_mul.numCols() + " " + matrix_mul.rowsPerBlock + " " + matrix_mul.rowsPerBlock + " " + matrix_mul.numRows())
+    val row_mat = matrix_mul.toIndexedRowMatrix()
+    println(row_mat.numCols() + " " + row_mat.numRows())
 
     //SVD
-    val svd: SingularValueDecomposition[RowMatrix, Matrix] = resRowMatrix.computeSVD(10, true)
+    val svd: SingularValueDecomposition[RowMatrix, Matrix] = matrix_mul.toCoordinateMatrix().toRowMatrix().computeSVD(10, true)//.computeSVD(10, true)
 
-    val U: RowMatrix = svd.U // The U factor is a RowMatrix.
+    val U: IndexedRowMatrix = svd.U // The U factor is a RowMatrix.
     val s: Vector = svd.s // The singular values are stored in a local dense vector.
-    val V: Matrix = svd.V // The V factor is a local dense matrix.
+    val V: Matrix = svd.V /// / The V factor is a local dense matrix.
 
+    var U_rdd = U.rows.sortBy(_.index).map(_.vector.toArray)
 
     //BUILD GEOTIFFS
     //Merge two RDDs, one containing the clusters_ID indices and the other one the indices of a Tile's grid cells
