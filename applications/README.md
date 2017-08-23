@@ -19,3 +19,6 @@ Under the directory [jupyter_notebooks](./notebooks/) several templates can be f
 For code development it is handy to have an IDE for features such as auto-completion. For this project we have used two different IDEs from [JetBrains](https://www.jetbrains.com/):
 * [PyCharm](https://www.jetbrains.com/pycharm/) for python, more details at [ides/python](ides/python)
 * [IntelliJ IDEA](https://www.jetbrains.com/idea/) for java and scala, more details at [ides/scala](ides/scala)
+
+## How to do version control on the Jupyter Notebooks?
+to be done by Raul ... 
