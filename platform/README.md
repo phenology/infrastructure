@@ -47,6 +47,9 @@ Not it is time to upload some data. The following example shows how to upload th
 # Copy the files
 ./bin/hadoop dfs -copyFromLocal <path_to_spring-index>/spring-index/ /user/hadoop/
 
+# In case you need to load into a specific user directory and you do not have write permissions
+HADOOP_USER_NAME=pheno ./bin/hadoop dfs -copyFromLocal <path_to_data>/* /user/pheno/
+
 # List the uploaded files
 ./bin/hadoop dfs -ls /user/hadoop/spring-index/
 ```
