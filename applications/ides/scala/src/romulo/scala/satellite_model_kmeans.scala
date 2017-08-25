@@ -29,6 +29,7 @@ object satellite_model_kmeans extends App {
     val masterURL = "spark://emma0.emma.nlesc.nl:7077"
     val sc = new SparkContext(new SparkConf().setAppName(appName).setMaster(masterURL))
 
+    //OPERATION MODE
     var inpB_rdd_offline_mode = true
     var inpA_rdd_offline_mode = true
     var matrix_offline_mode = true
@@ -64,7 +65,8 @@ object satellite_model_kmeans extends App {
     val save_rdds = true
     val save_matrix = true
 
-    //Check offline modes
+
+    // OPERATION VALIDATION
     var conf = sc.hadoopConfiguration
     var fs = org.apache.hadoop.fs.FileSystem.get(conf)
 
@@ -187,8 +189,10 @@ object satellite_model_kmeans extends App {
       value
     }
 
-    t0 = System.nanoTime()
+    //LOAD GeoTiffs
 
+    // GeoTiffs A
+    t0 = System.nanoTime()
     //Load Mask
     if (toBeMasked) {
       val mask_tiles_RDD = sc.hadoopGeoTiffRDD(mask_path).values
@@ -203,8 +207,6 @@ object satellite_model_kmeans extends App {
 
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
-
-    mask_tile0.size
 
     t0 = System.nanoTime()
     if (inpA_rdd_offline_mode) {
@@ -234,9 +236,11 @@ object satellite_model_kmeans extends App {
     var inpA_grid0_index: RDD[Double] = inpA_grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m)
     inpA_cells_size = inpA_grid0_index.count().toInt
     println("Number of cells is: " + inpA_cells_size)
+
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
+    //GeoTiffs B
     t0 = System.nanoTime()
     if (inpB_rdd_offline_mode) {
       inpB_grids_RDD = sc.objectFile(inpB_grid_path)
@@ -327,6 +331,8 @@ object satellite_model_kmeans extends App {
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
+    //MATRIX
+    t0 = System.nanoTime()
     var grids_matrix: RDD[Vector] = sc.emptyRDD
 
     val inp_grids_tuple :RDD[(Long, (Array[Double], Array[Double]))] = inpA_grids.zipWithUniqueId().map{ case (v,i) => (i,v)}.join(inpB_grids.zipWithUniqueId().map{case (v,i) => (i,v)})
@@ -358,6 +364,7 @@ object satellite_model_kmeans extends App {
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
+    //KMEANS TRAINING
     t0 = System.nanoTime()
     //Global variables
     var kmeans_models :Array[KMeansModel] = new Array[KMeansModel](num_kmeans)
@@ -419,6 +426,7 @@ object satellite_model_kmeans extends App {
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
+    // KMEANS CLUSTERING
     t0 = System.nanoTime()
     //Cache it so kmeans is more efficient
     grids_matrix.cache()
