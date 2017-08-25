@@ -22,7 +22,7 @@ import scala.sys.process._
 //Spire is a numeric library for Scala which is intended to be generic, fast, and precise.
 import spire.syntax.cfor._
 
-object inpA_inpB_kmeans extends App {
+object satellite_model_kmeans extends App {
 
   override def main(args: Array[String]): Unit = {
     val appName = this.getClass.getName
