@@ -26,4 +26,5 @@ lot memory for calculating PCA. For example, ["*The other day I found this post 
 calculating a PCA of a matrix with 1 million rows and 13,000 columns. This is pretty big as far as PCA usually goes. They
 used a Spark cluster on a 16 core machine with 30GB of RAM and it took them 27 hours.*"](http://amedee.me/post/pca-large-matrices/). Hence,
 we decided to explore **randomized SVD** methods. There two nice implementations, one from Facebook called [fbpca](https://github.com/facebook/fbpca)
-and another one by [scikit-learn](http://scikit-learn.org/stable/modules/generated/sklearn.decomposition.PCA.html).
+and another one by [scikit-learn](http://scikit-learn.org/stable/modules/generated/sklearn.decomposition.PCA.html). There is also a nice paper entitled, [*Randomized algorithms for distributed computation of principal component analysis and singular value
+decomposition*](https://arxiv.org/pdf/1612.08709.pdf).
