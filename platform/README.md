@@ -7,7 +7,7 @@ Once the platform is up and running, the user only needs to upload the input dat
 ## Emma
 Emma is a project where ansible is used to setup a Spark cluster with GeoTrellis and SciSpark modules, and using for storage two flavors of storage, as file-based HDFS and GlusterFS and as object-based Minio (it has the same API as Amazon S3). To install the platform the user should read the instructions detailed in [**emma's** README](https://github.com/nlesc-sherlock/emma/blob/master/README.md).
 
-**For this project the platform provision should only install a light version of the platform**. Such light platform does not have Docker-swarm and GlusterFS. To install such platform the user instead of running **ansible-playbook install_platform.yml**, as mentioned in [provision section](https://github.com/nlesc-sherlock/emma/blob/documentation/ansible.md#provision), the user should run the following:
+**For this project the platform provision should only install a light version of the platform**. Such light platform does not have Docker-swarm and GlusterFS. To install such platform the user instead of running **ansible-playbook install_platform.yml**, as mentioned in [provision section](https://github.com/nlesc-sherlock/emma/blob/phenology/ansible.md#provision), the user should run the following:
 ```
 ansible-playbook playbooks/install_spark.yml
 ```
