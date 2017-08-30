@@ -78,7 +78,7 @@ object satellite_model_kmeans extends App {
     var inpA_grid_path = out_path + inpA_dir + "_grid"
     var grid0_path = out_path + inpB_dir + "_grid0"
     var grid0_index_path = out_path + inpB_dir + "_grid0_index"
-    var matrix_path = out_path + inpB_dir + "_matrix"
+    var matrix_path = out_path + inpB_dir + "_matrix" + "_" + first_year + "_" + last_year
     var metadata_path = out_path + inpB_dir + "_metadata"
 
     val inpB_rdd_offline_exists = fs.exists(new org.apache.hadoop.fs.Path(inpB_grid_path))
@@ -122,7 +122,7 @@ object satellite_model_kmeans extends App {
     }
     println(num_kmeans)
     var kmeans_model_paths: Array[String] = Array.fill[String](num_kmeans)("")
-    var wssse_path: String = out_path + "/" + numIterations + "_wssse"
+    var wssse_path: String = out_path + "/" + numIterations + "_wssse" + "_" + first_year + "_" + last_year
     var geotiff_hdfs_paths: Array[String] = Array.fill[String](num_kmeans)("")
     var geotiff_tmp_paths: Array[String] = Array.fill[String](num_kmeans)("")
     var numClusters_id = 0
@@ -130,7 +130,7 @@ object satellite_model_kmeans extends App {
     if (num_kmeans > 1) {
       numClusters_id = 0
       cfor(minClusters)(_ <= maxClusters, _ + stepClusters) { numClusters =>
-        kmeans_model_paths(numClusters_id) = out_path + "/kmeans_model_" + band_num + "_" + numClusters + "_" + numIterations
+        kmeans_model_paths(numClusters_id) = out_path + "/kmeans_model_" + band_num + "_" + numClusters + "_" + numIterations + "_" + first_year + "_" + last_year
 
         //Check if the file exists
         val kmeans_exist = fs.exists(new org.apache.hadoop.fs.Path(kmeans_model_paths(numClusters_id)))
@@ -140,19 +140,19 @@ object satellite_model_kmeans extends App {
           kmeans_offline_mode = false
         }
 
-        geotiff_hdfs_paths(numClusters_id) = out_path + "/clusters_" + band_num + "_" + numClusters + "_" + numIterations
+        geotiff_hdfs_paths(numClusters_id) = out_path + "/clusters_" + band_num + "_" + numClusters + "_" + numIterations + "_" + first_year + "_" + last_year
         geotiff_tmp_paths(numClusters_id) = "/tmp/clusters_" + band_num + "_" + numClusters + "_" + numIterations
         numClusters_id += 1
       }
       kmeans_offline_mode = false
     } else {
-      kmeans_model_paths(0) = out_path + "/kmeans_model_" + band_num + "_" + minClusters + "_" + numIterations
+      kmeans_model_paths(0) = out_path + "/kmeans_model_" + band_num + "_" + minClusters + "_" + numIterations + "_" + first_year + "_" + last_year
       val kmeans_offline_exists = fs.exists(new org.apache.hadoop.fs.Path(kmeans_model_paths(0)))
       if (kmeans_offline_mode != kmeans_offline_exists) {
         println("\"Kmeans\" offline mode is not set properly, i.e., either it was set to false and the required file does not exist or vice-versa. We will reset it to " + kmeans_offline_exists.toString())
         kmeans_offline_mode = kmeans_offline_exists
       }
-      geotiff_hdfs_paths(0) = out_path + "/clusters_" + band_num + "_" + minClusters + "_" + numIterations
+      geotiff_hdfs_paths(0) = out_path + "/clusters_" + band_num + "_" + minClusters + "_" + numIterations + "_" + first_year + "_" + last_year
       geotiff_tmp_paths(0) = "/tmp/clusters_" + band_num + "_" + minClusters + "_" + numIterations
     }
 
