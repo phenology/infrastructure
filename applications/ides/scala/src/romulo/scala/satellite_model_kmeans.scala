@@ -459,14 +459,14 @@ object satellite_model_kmeans extends App {
         val geoTif = new SinglebandGeoTiff(cluster_cellsD, projected_extent.extent, projected_extent.crs, Tags.empty, GeoTiffOptions(compression.DeflateCompression))
 
         //Save to /tmp/
-        GeoTiffWriter.write(geoTif, geotiff_tmp_paths(numClusters_id) + "_" + years(year) + "_.tif")
+        GeoTiffWriter.write(geoTif, geotiff_tmp_paths(numClusters_id) + "_" + years(year) + ".tif")
 
         //Upload to HDFS
-        var cmd = "hadoop dfs -copyFromLocal -f " + geotiff_tmp_paths(numClusters_id) + "_" + years(year) + "_.tif" + " " + geotiff_hdfs_paths(numClusters_id) + "_" + years(year) + "_.tif"
+        var cmd = "hadoop dfs -copyFromLocal -f " + geotiff_tmp_paths(numClusters_id) + "_" + years(year) + ".tif" + " " + geotiff_hdfs_paths(numClusters_id) + "_" + years(year) + ".tif"
         Process(cmd)!
 
         //Remove from /tmp/
-        cmd = "rm -fr " + geotiff_tmp_paths(numClusters_id) + "_" + years(year) + "_.tif"
+        cmd = "rm -fr " + geotiff_tmp_paths(numClusters_id) + "_" + years(year) + ".tif"
         Process(cmd)!
 
         cellIDB.destroy()
