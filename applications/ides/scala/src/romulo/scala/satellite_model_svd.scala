@@ -345,7 +345,9 @@ object satellite_model_svd extends App {
       val satellite_M_Nt_1_blockMatrix = new CoordinateMatrix(sat_M_Nt_1_byColumnAndRow).toBlockMatrix()
       val satellite_M_Nt_Gc_blockMatrix = satellite_M_Nt_1_blockMatrix.multiply(satellite_M_1_Gc_blockMatrix)
 
-      Sc = satellite_blockMatrix.subtract(satellite_M_Nt_Gc_blockMatrix)
+      //Sc = satellite_blockMatrix.subtract(satellite_M_Nt_Gc_blockMatrix)
+      val joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = satellite_blockMatrix.toCoordinateMatrix().toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(satellite_M_Nt_Gc_blockMatrix.toCoordinateMatrix().toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
+      Sc = (new CoordinateMatrix(joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1*m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))).toBlockMatrix()
 
       //save to disk
       Sc.toIndexedRowMatrix().rows.saveAsObjectFile(sc_path)
@@ -396,7 +398,10 @@ object satellite_model_svd extends App {
       val model_M_Nt_1_blockMatrix = new CoordinateMatrix(mod_M_Nt_1_byColumnAndRow).toBlockMatrix()
       val model_M_Nt_Gc_blockMatrix = model_M_Nt_1_blockMatrix.multiply(model_M_1_Gc_blockMatrix)
       val model_M_Gc_Nt_blockMatrix = model_M_Nt_Gc_blockMatrix.transpose
-      Mc = model_blockMatrix.subtract(model_M_Gc_Nt_blockMatrix)
+
+      //Mc = model_blockMatrix.subtract(model_M_Gc_Nt_blockMatrix)
+      val joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = model_blockMatrix.toCoordinateMatrix().toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(model_M_Gc_Nt_blockMatrix.toCoordinateMatrix().toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
+      Mc = (new CoordinateMatrix(joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1*m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))).toBlockMatrix()
 
       //save to disk
       Mc.toIndexedRowMatrix().rows.saveAsObjectFile(mc_path)
