@@ -432,15 +432,20 @@ object satellite_model_kmeans extends App {
     numClusters_id = 0
     val grid0_index_I = grid0_index.zipWithIndex().map{ case (v,i) => (i,v)}
     grid0_index_I.cache()
-    var cells_per_year = kmeans_res(0).count().toInt
-    var num_cells = cells_per_year * years.length
+    var num_cells = kmeans_res(0).count().toInt
+    var cells_per_year = num_cells / ((last_year-first_year)+1)
+    println(cells_per_year)
+    println(num_cells)
+    val cells_per_yearB = sc.broadcast(cells_per_year)
+
     cfor(minClusters)(_ <= maxClusters, _ + stepClusters) { numClusters =>
       //Merge two RDDs, one containing the clusters_ID indices and the other one the indices of a Tile's grid cells
       var year :Int = 0
       cfor(0) (_ < num_cells, _ + cells_per_year) { cellID =>
         println("Saving GeoTiff for numClustersID: " + numClusters_id + " year: " + year)
+        val cellIDB = sc.broadcast(cellID)
         val kmeans_res_sing = kmeans_res(numClusters_id)
-        val cluster_cell_pos = ((kmeans_res(numClusters_id).zipWithIndex().map{ case (v,i) => (i,v)}.filterByRange(cellID, (cellID+cells_per_year-1)).join(grid0_index_I)).map{ case (k,(v,i)) => (v,i)})
+        val cluster_cell_pos = ((kmeans_res(numClusters_id).zipWithIndex().map{ case (v,i) => (i,v)}.filterByRange(cellIDB.value, (cellIDB.value+cells_per_yearB.value-1)).map{case (i,v) => (i-cellIDB.value, v)}.join(grid0_index_I)).map{ case (k,(v,i)) => (v,i)})
 
         //Associate a Cluster_IDs to respective Grid_cell
         val grid_clusters :RDD[ (Long, (Double, Option[Int]))] = grid0.leftOuterJoin(cluster_cell_pos.map{ case (c,i) => (i.toLong, c)})
@@ -450,7 +455,6 @@ object satellite_model_kmeans extends App {
 
         //Define a Tile
         val cluster_cells :Array[Double] = grid_clusters_res.values.collect()
-        cluster_cells.length
         val cluster_cellsD = DoubleArrayTile(cluster_cells, num_cols_rows._1, num_cols_rows._2)
         val geoTif = new SinglebandGeoTiff(cluster_cellsD, projected_extent.extent, projected_extent.crs, Tags.empty, GeoTiffOptions(compression.DeflateCompression))
 
@@ -465,10 +469,12 @@ object satellite_model_kmeans extends App {
         cmd = "rm -fr " + geotiff_tmp_paths(numClusters_id) + "_" + years(year) + "_.tif"
         Process(cmd)!
 
+        cellIDB.destroy()
         year += 1
       }
       numClusters_id += 1
     }
+    cells_per_yearB.destroy()
     grid0_index_I.unpersist()
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
