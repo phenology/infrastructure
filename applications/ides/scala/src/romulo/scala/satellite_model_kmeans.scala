@@ -216,9 +216,9 @@ object satellite_model_kmeans extends App {
       val band_numB :Broadcast[Int] = sc.broadcast(band_num)
       if (toBeMasked) {
         val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
-        inpA_grids_RDD = inpA_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000))
+        inpA_grids_RDD = inpA_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000).filter(!_.isNaN))
       } else {
-        inpA_grids_RDD = inpA_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble())
+        inpA_grids_RDD = inpA_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble().filter(!_.isNaN))
       }
 
       //Store in HDFS
@@ -273,9 +273,9 @@ object satellite_model_kmeans extends App {
       //Get Index for each Cell
       val grids_withIndex = inpB_grids_RDD.zipWithIndex().map { case (e, v) => (v, e) }
       if (toBeMasked) {
-        grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.filter(m => m._1 != -1000.0).map { case (v, i) => (i) }
+        grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.filter(m => m._1 != -1000.0).filter(m => !m._1.isNaN).map { case (v, i) => (i) }
       } else {
-        grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.map { case (v, i) => (i) }
+        grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).filter(m => !m.isNaN).zipWithIndex.map { case (v, i) => (i) }
       }
 
       //Get the Tile's grid
@@ -283,9 +283,9 @@ object satellite_model_kmeans extends App {
 
       //Lets filter out NaN
       if (toBeMasked) {
-        inpB_grids_RDD = inpB_grids_RDD.map(m => m.filter(m => m != -1000.0))
+        inpB_grids_RDD = inpB_grids_RDD.map(m => m.filter(m => m != -1000.0).filter(m => !m.isNaN))
       } else {
-        inpB_grids_RDD = inpB_grids_RDD
+        inpB_grids_RDD = inpB_grids_RDD.map(m => m.filter(!_.isNaN))
       }
 
       //Store data in HDFS
@@ -313,8 +313,6 @@ object satellite_model_kmeans extends App {
     //Filter out the range of years:
     inpB_grids = inpB_grids_withIndex.filterByRange(years_range._1, years_range._2).values
 
-    var inpB_tile0_index: RDD[Double] = inpB_grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m)
-
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
@@ -325,7 +323,7 @@ object satellite_model_kmeans extends App {
     if (matrix_offline_mode) {
       grids_matrix = sc.objectFile(matrix_path)
     } else {
-      val inp_grids :RDD[Array[Double]] = inpA_grids.flatMap(m => m).zipWithIndex().map{ case (v,i) => (i,v)}.join(inpB_grids.flatMap(m => m).zipWithIndex().map{case (v,i) => (i,v)}).map{case (i, (a1,a2)) => Array(a1, a2)}
+      val inp_grids :RDD[Array[Double]] = inpA_grids.flatMap(m => m).zipWithIndex().map{ case (v,i) => (i,v)}.join(inpB_grids.flatMap(m => m).zipWithIndex().map{case (v,i) => (i,v)}).sortByKey(true).map{case (i, (a1,a2)) => Array(a1, a2)}
       //Dense Vector
       //grids_matrix = inp_grids.map(m => Vectors.dense(m))
       //Sparse Vector
