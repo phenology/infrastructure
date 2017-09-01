@@ -167,9 +167,8 @@ object satellite_model_kmeans extends App {
     var num_cols_rows: (Int, Int) = (0, 0)
     var cellT: CellType = UByteCellType
     var mask_tile0: Tile = new SinglebandGeoTiff(geotrellis.raster.ArrayTile.empty(cellT, num_cols_rows._1, num_cols_rows._2), projected_extent.extent, projected_extent.crs, Tags.empty, GeoTiffOptions.DEFAULT).tile
-    var cells_size: Long = 0
-    var inpA_cells_size: Long = 0
-    var inpB_cells_size: Long = 0
+    //We are comparing 2 data sets only
+    var cells_size: Long = 2
     var t0: Long = 0
     var t1: Long = 0
 
@@ -211,15 +210,15 @@ object satellite_model_kmeans extends App {
     if (inpA_rdd_offline_mode) {
       inpA_grids_RDD = sc.objectFile(inpA_grid_path)
     } else {
-      //Lets load MODIS Singleband GeoTiffs and return RDD just with the tiles.
-      val inpA_geos_RDD = sc.hadoopGeoTiffRDD(inpA_filepath, pattern)
+      val inpA_geos_RDD = sc.hadoopMultibandGeoTiffRDD(inpB_filepath, pattern)
       val inpA_tiles_RDD = inpA_geos_RDD.values
 
+      val band_numB :Broadcast[Int] = sc.broadcast(band_num)
       if (toBeMasked) {
         val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
-        inpA_grids_RDD = inpA_tiles_RDD.map(m => m.localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000))
+        inpA_grids_RDD = inpA_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000))
       } else {
-        inpA_grids_RDD = inpA_tiles_RDD.map(m => m.toArrayDouble())
+        inpA_grids_RDD = inpA_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble())
       }
 
       //Store in HDFS
@@ -233,8 +232,6 @@ object satellite_model_kmeans extends App {
     inpA_grids = inpA_grids_withIndex.filterByRange(years_range._1, years_range._2).values
 
     var inpA_grid0_index: RDD[Double] = inpA_grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m)
-    inpA_cells_size = inpA_grid0_index.count().toInt
-    println("Number of cells is: " + inpA_cells_size)
 
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
@@ -317,15 +314,6 @@ object satellite_model_kmeans extends App {
     inpB_grids = inpB_grids_withIndex.filterByRange(years_range._1, years_range._2).values
 
     var inpB_tile0_index: RDD[Double] = inpB_grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m)
-    inpB_cells_size = inpB_tile0_index.count().toInt
-    println("Number of cells is: " + inpB_cells_size)
-
-    if (inpA_cells_size != inpB_cells_size){
-      println("Cells size differs: " + inpA_cells_size + " and " + inpB_cells_size)
-      System.exit(0)
-    } else {
-      cells_size = inpA_cells_size
-    }
 
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
@@ -333,11 +321,11 @@ object satellite_model_kmeans extends App {
     //MATRIX
     t0 = System.nanoTime()
     var grids_matrix: RDD[Vector] = sc.emptyRDD
-    val inp_grids :RDD[Array[Double]] = inpA_grids.flatMap(m => m).zipWithUniqueId().map{ case (v,i) => (i,v)}.join(inpB_grids.flatMap(m => m).zipWithUniqueId().map{case (v,i) => (i,v)}).map{case (i, (a1,a2)) => Array(a1, a2)}
 
     if (matrix_offline_mode) {
       grids_matrix = sc.objectFile(matrix_path)
     } else {
+      val inp_grids :RDD[Array[Double]] = inpA_grids.flatMap(m => m).zipWithIndex().map{ case (v,i) => (i,v)}.join(inpB_grids.flatMap(m => m).zipWithIndex().map{case (v,i) => (i,v)}).map{case (i, (a1,a2)) => Array(a1, a2)}
       //Dense Vector
       //grids_matrix = inp_grids.map(m => Vectors.dense(m))
       //Sparse Vector
@@ -430,9 +418,14 @@ object satellite_model_kmeans extends App {
     //CREATE GeoTiffs
     t0 = System.nanoTime()
     numClusters_id = 0
+    grid0_index.cache()
+    grid0.cache()
     val grid0_index_I = grid0_index.zipWithIndex().map{ case (v,i) => (i,v)}
     grid0_index_I.cache()
+    grid0_index.unpersist()
+    kmeans_res(0).cache()
     var num_cells = kmeans_res(0).count().toInt
+    kmeans_res(0).unpersist()
     var cells_per_year = num_cells / ((last_year-first_year)+1)
     println(cells_per_year)
     println(num_cells)
@@ -441,11 +434,13 @@ object satellite_model_kmeans extends App {
     cfor(minClusters)(_ <= maxClusters, _ + stepClusters) { numClusters =>
       //Merge two RDDs, one containing the clusters_ID indices and the other one the indices of a Tile's grid cells
       var year :Int = 0
+      val kmeans_res_zip = kmeans_res(numClusters_id).zipWithIndex()
+      kmeans_res_zip.cache()
       cfor(0) (_ < num_cells, _ + cells_per_year) { cellID =>
-        println("Saving GeoTiff for numClustersID: " + numClusters_id + " year: " + year)
+        println("Saving GeoTiff for numClustersID: " + numClusters_id + " year: " + years(year))
         val cellIDB = sc.broadcast(cellID)
         val kmeans_res_sing = kmeans_res(numClusters_id)
-        val cluster_cell_pos = ((kmeans_res(numClusters_id).zipWithIndex().map{ case (v,i) => (i,v)}.filterByRange(cellIDB.value, (cellIDB.value+cells_per_yearB.value-1)).map{case (i,v) => (i-cellIDB.value, v)}.join(grid0_index_I)).map{ case (k,(v,i)) => (v,i)})
+        val cluster_cell_pos = ((kmeans_res_zip.map{ case (v,i) => (i,v)}.filterByRange(cellIDB.value, (cellIDB.value+cells_per_yearB.value-1)).map{case (i,v) => (i-cellIDB.value, v)}.join(grid0_index_I)).map{ case (k,(v,i)) => (v,i)})
 
         //Associate a Cluster_IDs to respective Grid_cell
         val grid_clusters :RDD[ (Long, (Double, Option[Int]))] = grid0.leftOuterJoin(cluster_cell_pos.map{ case (c,i) => (i.toLong, c)})
@@ -472,10 +467,12 @@ object satellite_model_kmeans extends App {
         cellIDB.destroy()
         year += 1
       }
+      kmeans_res_zip.unpersist()
       numClusters_id += 1
     }
     cells_per_yearB.destroy()
     grid0_index_I.unpersist()
+    grid0.unpersist()
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
