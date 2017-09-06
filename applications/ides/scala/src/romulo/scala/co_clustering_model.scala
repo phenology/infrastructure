@@ -109,7 +109,17 @@ object co_clustering_model extends App {
       System.exit(0)
     }
 
+    //Global variables
     var model_years_range = (model_years.indexOf(model_first_year), model_years.indexOf(model_last_year))
+    var projected_extent = new ProjectedExtent(new Extent(0, 0, 0, 0), CRS.fromName("EPSG:3857"))
+    var grid0: RDD[(Long, Double)] = sc.emptyRDD
+    var grid0_index: RDD[Long] = sc.emptyRDD
+    var grids_noNaN_RDD: RDD[Array[Double]] = sc.emptyRDD
+    var num_cols_rows: (Int, Int) = (0, 0)
+    var cellT: CellType = UByteCellType
+    var grids_RDD: RDD[Array[Double]] = sc.emptyRDD
+    var mask_tile0: Tile = new SinglebandGeoTiff(geotrellis.raster.ArrayTile.empty(cellT, num_cols_rows._1, num_cols_rows._2), projected_extent.extent, projected_extent.crs, Tags.empty, GeoTiffOptions.DEFAULT).tile
+    var grid_cells_size: Long = 0
 
     def serialize(value: Any): Array[Byte] = {
       val out_stream: ByteArrayOutputStream = new ByteArrayOutputStream()
@@ -127,17 +137,6 @@ object co_clustering_model extends App {
     }
 
     var t0 = System.nanoTime()
-    //Global variables
-    var projected_extent = new ProjectedExtent(new Extent(0, 0, 0, 0), CRS.fromName("EPSG:3857"))
-    var grid0: RDD[(Long, Double)] = sc.emptyRDD
-    var grid0_index: RDD[Long] = sc.emptyRDD
-    var grids_noNaN_RDD: RDD[Array[Double]] = sc.emptyRDD
-    var num_cols_rows: (Int, Int) = (0, 0)
-    var cellT: CellType = UByteCellType
-    var grids_RDD: RDD[Array[Double]] = sc.emptyRDD
-    var mask_tile0: Tile = new SinglebandGeoTiff(geotrellis.raster.ArrayTile.empty(cellT, num_cols_rows._1, num_cols_rows._2), projected_extent.extent, projected_extent.crs, Tags.empty, GeoTiffOptions.DEFAULT).tile
-    var grid_cells_size: Long = 0
-
     //Load Mask
     if (toBeMasked) {
       val mask_tiles_RDD = sc.hadoopGeoTiffRDD(mask_path).values
@@ -294,10 +293,13 @@ object co_clustering_model extends App {
     */
 
     def calculate_average (Left :CoordinateMatrix, Z :CoordinateMatrix, Right :CoordinateMatrix, W :CoordinateMatrix, epsilon :Double): CoordinateMatrix = {
+      println("Starting calculate_average")
       var _W :CoordinateMatrix = null
       var _Z : CoordinateMatrix = null
+      var res : CoordinateMatrix = null
 
       if (W == null) {
+        println("Inside the loop")
         val byColumnAndRow = Z.toRowMatrix().rows.zipWithIndex.map {
           case (row, rowIndex) => row.toArray.zipWithIndex.map {
             case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, 1)
@@ -305,26 +307,33 @@ object co_clustering_model extends App {
         }.flatMap(x => x)
 
         _W = new CoordinateMatrix(byColumnAndRow)
+        _Z = Z
       } else {
         //We assume that both rows fit in memory
         val joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = W.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(Z.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
         _Z = new CoordinateMatrix(joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1*m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))
+        _W = W
       }
 
       val leftT = Left.transpose
+      leftT.numCols()
       val leftT_Z_right = leftT.toBlockMatrix().multiply(_Z.toBlockMatrix().multiply(Right.toBlockMatrix()))
       val mean_Z_epsilon = _Z.toRowMatrix().rows.map(m => m.toArray.sum/m.size).reduce( (a,b) => a+b)/_Z.numRows().toDouble * epsilon
       val mean_Z_epsilonB = sc.broadcast(mean_Z_epsilon)
       val numerator = leftT_Z_right.toIndexedRowMatrix().rows.map( m => m.vector.toArray.map(m => m+mean_Z_epsilonB.value))
-      mean_Z_epsilonB.destroy()
 
-      val leftT_w_right = leftT.toBlockMatrix().multiply(W.toBlockMatrix().multiply(Right.toBlockMatrix()))
+      val leftT_w_right = leftT.toBlockMatrix().multiply(_W.toBlockMatrix().multiply(Right.toBlockMatrix()))
       val epsilonB = sc.broadcast(epsilon)
       val denominator = leftT_w_right.toIndexedRowMatrix().rows.map( m => m.vector.toArray.map(m => m+epsilonB.value))
 
       //We assume the two rows fit in memory
       val numerator_denominator :RDD[ (Long, (Array[Double], Array[Double]))] = numerator.zipWithUniqueId().map{ case (v,i) => (i,v)}.join(denominator.zipWithUniqueId().map{case (v,i) => (i,v)})
-      new CoordinateMatrix(numerator_denominator.map{ case (row_index,(a,b)) => a.zip(b).map(m => m._1 / m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))
+      res = new CoordinateMatrix(numerator_denominator.map{ case (row_index,(a,b)) => a.zip(b).map(m => m._1 / m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))
+
+      mean_Z_epsilonB.destroy()
+      epsilonB.destroy()
+
+      return res
     }
 
     /*
@@ -339,8 +348,9 @@ object co_clustering_model extends App {
     }
     */
 
-    def coCavg (dist :Double, row_col :String, Right: CoordinateMatrix, Z: CoordinateMatrix, C: CoordinateMatrix, W: CoordinateMatrix, epsilon: Double) :(CoordinateMatrix,CoordinateMatrix) = {
-      val CoCavg = calculate_average(Right, Z, C, W, epsilon)
+    def coCavg (dist :Double, row_col :String, R: CoordinateMatrix, Z: CoordinateMatrix, C: CoordinateMatrix, W: CoordinateMatrix, epsilon: Double) :(CoordinateMatrix,CoordinateMatrix) = {
+      println("Starting coCavg")
+      val CoCavg = calculate_average(R, Z, C, W, epsilon)
       val byColumnAndRow = Z.toRowMatrix().rows.zipWithIndex.map {
         case (row, rowIndex) => row.toArray.zipWithIndex.map {
           case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, dist)
@@ -350,7 +360,7 @@ object co_clustering_model extends App {
       if (row_col.equals("row")) {
         (a, CoCavg.toBlockMatrix().multiply(C.toBlockMatrix().transpose).toCoordinateMatrix())
       } else {
-        (a, Right.toBlockMatrix().multiply(CoCavg.toBlockMatrix().transpose).toCoordinateMatrix())
+        (a, R.toBlockMatrix().multiply(CoCavg.toBlockMatrix().transpose).toCoordinateMatrix())
       }
     }
 
@@ -376,24 +386,26 @@ object co_clustering_model extends App {
 
     def euc (i: Long, Z_X: CoordinateMatrix, Y: CoordinateMatrix, W: CoordinateMatrix, each :Int) :RDD[MatrixEntry] = {
       val Y_row_i = Y.toRowMatrix().rows.zipWithIndex().filter(_._2 == i)
+      var res: RDD[MatrixEntry] = sc.emptyRDD
 
       val eachB = sc.broadcast(each)
       val rep_Y_row_i = Y_row_i.map{ case (v, i) => v.toArray.map( m => Array.fill(eachB.value)(m))}.flatMap(m => m)
-      eachB.destroy()
 
       val Z_X_rep_Y_joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = Z_X.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(rep_Y_row_i.zipWithUniqueId().map{ case (v,i) => (i,v)})
       val Z_X_rep_Y = new CoordinateMatrix(Z_X_rep_Y_joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => math.pow(m._1-m._2,2)).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))
 
       val joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = W.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(Z_X_rep_Y.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
       val iB = sc.broadcast(i)
-      val res = joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1-m._2)}.map( m => (iB.value,m.sum)).zipWithIndex.map{ case ((row_index, v),col_index) => new MatrixEntry(row_index, col_index,v)}
+      res = joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1-m._2)}.map( m => (iB.value,m.sum)).zipWithIndex.map{ case ((row_index, v),col_index) => new MatrixEntry(row_index, col_index,v)}
+
+      eachB.destroy()
       iB.destroy()
-      res
+      return res
     }
 
     def similarity_measure(dist :Double, Z : CoordinateMatrix, X: CoordinateMatrix, Y: CoordinateMatrix, W: CoordinateMatrix, epsilon :Double) :CoordinateMatrix = {
       var _W :CoordinateMatrix = null
-      var _Z : CoordinateMatrix = null
+      var res :CoordinateMatrix = null
 
       if (W == null) {
         val byColumnAndRow = Z.toRowMatrix().rows.zipWithIndex.map {
@@ -403,6 +415,8 @@ object co_clustering_model extends App {
         }.flatMap(x => x)
 
         _W = new CoordinateMatrix(byColumnAndRow)
+      } else {
+        _W = W
       }
       if (dist == 0) {
         val Z_X_joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = Z.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(X.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
@@ -411,14 +425,14 @@ object co_clustering_model extends App {
 
         var resRDD :RDD[MatrixEntry] = sc.emptyRDD
 
-        for (i <- 0 until (Y.numRows())) {
+        for (i <- 0 until (Y.numRows().toInt)) {
           if (resRDD.isEmpty()) {
             resRDD = euc(i, X_Z, Y, W, Z_rows)
           } else {
             resRDD = resRDD.union(euc(i, X_Z, Y, W, Z_rows))
           }
         }
-        new CoordinateMatrix(resRDD)
+        res = new CoordinateMatrix(resRDD)
       } else {
         val W_X_joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = W.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(X.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
         val W_X = new CoordinateMatrix(W_X_joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1*m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))
@@ -435,8 +449,11 @@ object co_clustering_model extends App {
         val W_Z_log_Y_epsilonT = W_Z.toBlockMatrix().multiply(log_Y_epsilonT.toBlockMatrix()).toCoordinateMatrix()
 
         val joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = W_X_Y_epsilonT.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(W_Z_log_Y_epsilonT.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
-        new CoordinateMatrix(joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1-m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))
+        res = new CoordinateMatrix(joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1-m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))
+        epsilonB.destroy()
       }
+
+      return res
     }
 
     /*
@@ -465,7 +482,7 @@ object co_clustering_model extends App {
 
       val Y_num_rows = Y.numRows().toInt
       val Y_num_rowsB = sc.broadcast(Y_num_rows)
-      val byColumnAndRow = Z.toRowMatrix().rows.zipWithIndex.map {
+      val byColumnAndRow = Y.toRowMatrix().rows.zipWithIndex.map {
         case (row, rowIndex) => Array.fill(0)(Y_num_rowsB.value).zipWithIndex.map {
           case (number, columnIndex) => if (columnIndex == rowIndex) (rowIndex, new MatrixEntry(rowIndex, columnIndex, 1)) else (rowIndex, new MatrixEntry(rowIndex, columnIndex, number))
         }
@@ -483,8 +500,8 @@ object co_clustering_model extends App {
 
       for (r in 1:nruns) {
         # Initialization of R and C
-        #Create an identity matrix
-        # Get row which is a random sample (betwewn numRowC and num of rows) with replacement
+        # Create an identity matrix with num of rows and cols equal to numRowC or numColC
+        # Define an array of size (dim(Z)[1] or dim(Z)[2]) filled with random numbers (with replacement) between 1 and numRowC (inclusive)
         R <- diag(numRowC)[base::sample(numRowC, dim(Z)[1], replace = TRUE),]
         C <- diag(numColC)[base::sample(numColC, dim(Z)[2], replace = TRUE),]
 
@@ -523,6 +540,33 @@ object co_clustering_model extends App {
     }
     */
 
+    /*
+    # Create an identity matrix with num of rows and cols equal to numRowC or numColC
+    # Define an array of size (dim(Z)[1] or dim(Z)[2]) filled with random numbers (with replacement) between 1 and numRowC
+    R <- diag(numRowC)[base::sample(numRowC, dim(Z)[1], replace = TRUE),]
+    */
+
+    def diag( dim :Int, rndUpper :Int, rndLength :Int) : CoordinateMatrix = {
+      val rnd = new scala.util.Random
+
+      /*Build Mask, i.e., [base::sample(numRowC, dim(Z)[1], replace = TRUE),]*/
+      //In scala random gives numbers between 0 inclusive and Upper exclusive.
+      val diagMask :Array[Long] = Array.fill(rndLength)(dim + rnd.nextInt(rndUpper))
+      val diagMaskRDD :RDD[Long] = sc.parallelize(diagMask)
+
+      /*Build Identity matrix*/
+      val rows :Array[Long] = Array.fill(dim)(0)
+      val dimB = sc.broadcast(dim)
+      val rowsRDD :RDD[Long] = sc.parallelize(rows)
+      val idenMat = rowsRDD.zipWithIndex().map{
+        case (v,rowIndex) => Array.fill(dimB.value)(v).zipWithIndex.map{
+          case (v, colIndex) => if (rowIndex == colIndex) (rowIndex, new MatrixEntry(rowIndex, colIndex, 1)) else (rowIndex, new MatrixEntry(rowIndex, colIndex, 0))
+        }
+      }.flatMap(m => m)
+      val diaMat = new CoordinateMatrix(idenMat.join(diagMaskRDD.zipWithIndex()).map{case (i,(m,rID)) => (m,rID)}.sortBy(_._2).map(_._1))
+      return diaMat
+    }
+
     def bbac (Z :CoordinateMatrix, numRowC: Int, numColC :Int, W :CoordinateMatrix, distance :String, errobj :Double, niters :Int, nruns :Int, epsilon :Double) :(CoordinateMatrix, CoordinateMatrix, String) = {
       var error :Double = Double.MaxValue
       var error_now :Double = Double.MaxValue
@@ -531,33 +575,22 @@ object co_clustering_model extends App {
       var C_star :CoordinateMatrix = null
       var R :CoordinateMatrix = null
       var C :CoordinateMatrix = null
+      var dim = 0
+      var rndUpper = 0
+      var rndLength = 0
 
       val dist = if (distance.toLowerCase.equals("euclidean")) 0 else 1 // "divergence"
 
       for (r <- 0 until nruns) {
-        val rnd = new scala.util.Random
-        var start = numRowC
-        var end   = Z.numCols().toInt
+        dim = numRowC
+        rndUpper = numRowC.toInt
+        rndLength = Z.numRows().toInt
+        R = diag(dim, rndUpper, rndLength)
 
-        val R_rnd = numRowC + rnd.nextInt((Z.numRows().toInt - numRowC) + 1)
-        val R_rndB = sc.broadcast(R_rnd)
-        val R_byColumnAndRow = Z.toRowMatrix().rows.zipWithIndex.map {
-          case (row, rowIndex) => row.toArray.zipWithIndex.map {
-            case (number, columnIndex) => if (columnIndex == rowIndex) new MatrixEntry(rowIndex, columnIndex, R_rndB.value) else new MatrixEntry(rowIndex, columnIndex, 0)
-          }
-        }.flatMap(x => x)
-        R = new CoordinateMatrix(R_byColumnAndRow)
-        R_rndB.destroy()
-
-        val C_rnd = numColC + rnd.nextInt((Z.numCols().toInt - numColC) + 1)
-        val C_rndB = sc.broadcast(C_rnd)
-        val C_byColumnAndRow = Z.toRowMatrix().rows.zipWithIndex.map {
-          case (row, rowIndex) => row.toArray.zipWithIndex.map {
-            case (number, columnIndex) => if (columnIndex == rowIndex) new MatrixEntry(rowIndex, columnIndex, C_rndB.value) else new MatrixEntry(rowIndex, columnIndex, 0)
-          }
-        }.flatMap(x => x)
-        C = new CoordinateMatrix(R_byColumnAndRow)
-        C_rndB.destroy()
+        dim = numColC
+        rndUpper = numColC.toInt
+        rndLength = Z.numCols().toInt
+        C = diag (dim, rndUpper, rndLength)
 
         for (s <- 0 until niters) {
           //Row estimation
@@ -591,7 +624,7 @@ object co_clustering_model extends App {
     }
 
     //bbac <- function(Z, numRowC, numColC, W = NULL, distance = "euclidean", errobj = 1e-6, niters = 100, nruns = 5, epsilon = 1e-8) {
-    val matrixDF = new CoordinateMatrix(grids_matrix.map(_.toArray).zipWithIndex().map{ case (a, row_index) => a.zipWithIndex.map{case (v,col_index) => new MatrixEntry(row_index, col_index, v)}}.flatMap(m => m))
+    val Z = new CoordinateMatrix(grids_matrix.map(_.toArray).zipWithIndex().map{ case (a, row_index) => a.zipWithIndex.map{case (v,col_index) => new MatrixEntry(row_index, col_index, v)}}.flatMap(m => m))
     val numRowC = 200
     val numColC = 3
     var W :CoordinateMatrix = null
@@ -604,7 +637,11 @@ object co_clustering_model extends App {
     var R:CoordinateMatrix = null
     var C:CoordinateMatrix = null
     var status :String = ""
-    (R, C, status) = bbac(matrixDF, numRowC, numColC, W, distance, errobj, niters, nruns, epsilon)
+
+    val res_bbac = bbac(Z, numRowC, numColC, W, distance, errobj, niters, nruns, epsilon)
+    R = res_bbac._1
+    C = res_bbac._2
+    status = res_bbac._3
 
     //Save Ouput
   }
