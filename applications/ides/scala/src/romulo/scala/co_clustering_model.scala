@@ -559,11 +559,11 @@ object co_clustering_model extends App {
       val dimB = sc.broadcast(dim)
       val rowsRDD :RDD[Long] = sc.parallelize(rows)
       val idenMat = rowsRDD.zipWithIndex().map{
-        case (v,rowIndex) => Array.fill(dimB.value)(v).zipWithIndex.map{
-          case (v, colIndex) => if (rowIndex == colIndex) (rowIndex, new MatrixEntry(rowIndex, colIndex, 1)) else (rowIndex, new MatrixEntry(rowIndex, colIndex, 0))
-        }
-      }.flatMap(m => m)
-      val diaMat = new CoordinateMatrix(idenMat.join(diagMaskRDD.zipWithIndex()).map{case (i,(m,rID)) => (m,rID)}.sortBy(_._2).map(_._1))
+        case (v,rowIndex) => (rowIndex, Array.fill(dimB.value)(v).zipWithIndex.map{
+          case (v, colIndex) => if (rowIndex == colIndex) (colIndex, 1) else (colIndex, 0)
+        })
+      }//.flatMap(m => m)
+      val diaMat = new CoordinateMatrix(idenMat.join(diagMaskRDD.zipWithIndex()).map{case (i,(m,rID)) => m.map{case (colIndex, v) => new MatrixEntry(rID, colIndex,v)}}.flatMap(m => m))
       return diaMat
     }
 
