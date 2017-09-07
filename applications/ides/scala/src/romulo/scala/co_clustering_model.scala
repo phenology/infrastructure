@@ -2,6 +2,7 @@ package main.scala
 
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
+import java.util.Random
 
 import geotrellis.proj4.CRS
 import geotrellis.raster.io.geotiff.{SinglebandGeoTiff, _}
@@ -269,6 +270,26 @@ object co_clustering_model extends App {
 
     //SUPPORT FUNCTIONS
 
+    /*
+    # Create an identity matrix with num of rows and cols equal to numRowC or numColC
+    # Use the diagMask to create a matrix with rows for which the indice is in diagMask.
+    */
+
+    def diag( dim :Int, diagMaskRDD :RDD[Long]) : CoordinateMatrix = {
+      /*Build Identity matrix*/
+      val rows :Array[Long] = Array.fill(dim)(0)
+      val dimB = sc.broadcast(dim)
+      val rowsRDD :RDD[Long] = sc.parallelize(rows)
+      val idenMat = rowsRDD.zipWithIndex().map{
+        case (v,rowIndex) => (rowIndex, Array.fill(dimB.value)(v).zipWithIndex.map{
+          case (v, colIndex) => if (rowIndex == colIndex) (colIndex, 1) else (colIndex, 0)
+        })
+      }//.flatMap(m => m)
+      val diaMat = new CoordinateMatrix(idenMat.join(diagMaskRDD.zipWithIndex()).map{case (i,(m,rID)) => m.map{case (colIndex, v) => new MatrixEntry(rID, colIndex,v)}}.flatMap(m => m))
+      return diaMat
+    }
+
+
     //CALCUALTE AVERAGE
     /*
     calculate_average <- function(Left, Z, Right, W, epsilon) {
@@ -427,20 +448,20 @@ object co_clustering_model extends App {
 
         for (i <- 0 until (Y.numRows().toInt)) {
           if (resRDD.isEmpty()) {
-            resRDD = euc(i, X_Z, Y, W, Z_rows)
+            resRDD = euc(i, X_Z, Y, _W, Z_rows)
           } else {
-            resRDD = resRDD.union(euc(i, X_Z, Y, W, Z_rows))
+            resRDD = resRDD.union(euc(i, X_Z, Y, _W, Z_rows))
           }
         }
         res = new CoordinateMatrix(resRDD)
       } else {
-        val W_X_joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = W.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(X.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
+        val W_X_joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = _W.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(X.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
         val W_X = new CoordinateMatrix(W_X_joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1*m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))
 
         val epsilonB = sc.broadcast(epsilon)
         val Y_epsilonT = new CoordinateMatrix(Y.toIndexedRowMatrix().rows.map(m => m.vector.toArray.map(m => m+epsilonB.value)).zipWithIndex().map{ case (a, row_index) => a.zipWithIndex.map{ case (v, col_index) => new MatrixEntry(row_index, col_index, v)}}.flatMap(m => m)).transpose()
 
-        val W_Z_joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = W.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(Z.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
+        val W_Z_joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = _W.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(Z.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
         val W_Z = new CoordinateMatrix(W_Z_joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1*m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))
 
         val log_Y_epsilonT = new CoordinateMatrix(Y_epsilonT.toIndexedRowMatrix().rows.map(m => m.vector.toArray.map(m => math.log(m))).zipWithIndex().map{ case (a, row_index) => a.zipWithIndex.map{ case (v, col_index) => new MatrixEntry(row_index, col_index, v)}}.flatMap(m => m)).transpose()
@@ -467,29 +488,20 @@ object co_clustering_model extends App {
       res <- sapply(1:dim(D)[1], function(i) sort(D[i,])[1]^(2-dist))
 
       # Create an identity matrix, diag(dim(Y)[1]), which has num_rows and num_cols = dim(Y)[1], i.e., number of rows of Y, and set diagonal to 1.
-      # dim(Y)[1])[id,] -> Give me the row from the identity matrix which has indice "id"
+      # dim(Y)[1])[id,] -> Give me a matrix composed by rows with indice in Array "id"
       return(list(Cluster = diag(dim(Y)[1])[id,], Error = sum(res)))
     }
     */
 
-    def assign_cluster (dist: Int, Z :CoordinateMatrix, X: CoordinateMatrix, Y: CoordinateMatrix, W: CoordinateMatrix, epsilon :Double) :(RDD[MatrixEntry], Double) = {
+    def assign_cluster (dist: Int, Z :CoordinateMatrix, X: CoordinateMatrix, Y: CoordinateMatrix, W: CoordinateMatrix, epsilon :Double) :(CoordinateMatrix, Double) = {
       val D = similarity_measure(dist, Z, X, Y, W, epsilon)
       val id = D.toRowMatrix().rows.map(_.toArray.zipWithIndex.sortBy(_._1).map(_._2).head)
       val dist2 :Int = 2-dist
       val dist2B = sc.broadcast(dist2)
       val res = D.toRowMatrix().rows.map( m => math.pow(m.toArray.sorted.head, dist2B.value))
-      dist2B.destroy()
 
-      val Y_num_rows = Y.numRows().toInt
-      val Y_num_rowsB = sc.broadcast(Y_num_rows)
-      val byColumnAndRow = Y.toRowMatrix().rows.zipWithIndex.map {
-        case (row, rowIndex) => Array.fill(0)(Y_num_rowsB.value).zipWithIndex.map {
-          case (number, columnIndex) => if (columnIndex == rowIndex) (rowIndex, new MatrixEntry(rowIndex, columnIndex, 1)) else (rowIndex, new MatrixEntry(rowIndex, columnIndex, number))
-        }
-      }.flatMap(x => x)
-      Y_num_rowsB.destroy()
-
-      (byColumnAndRow.join(id.map(_.toLong).zipWithUniqueId()).map(_._2._1), res.reduce((a,b) => a+b))
+      //dist2B.destroy()
+      (diag(Y.numRows().toInt, id.map(_.toLong)), res.reduce((a,b) => a+b))
     }
 
     /*
@@ -540,33 +552,6 @@ object co_clustering_model extends App {
     }
     */
 
-    /*
-    # Create an identity matrix with num of rows and cols equal to numRowC or numColC
-    # Define an array of size (dim(Z)[1] or dim(Z)[2]) filled with random numbers (with replacement) between 1 and numRowC
-    R <- diag(numRowC)[base::sample(numRowC, dim(Z)[1], replace = TRUE),]
-    */
-
-    def diag( dim :Int, rndUpper :Int, rndLength :Int) : CoordinateMatrix = {
-      val rnd = new scala.util.Random
-
-      /*Build Mask, i.e., [base::sample(numRowC, dim(Z)[1], replace = TRUE),]*/
-      //In scala random gives numbers between 0 inclusive and Upper exclusive.
-      val diagMask :Array[Long] = Array.fill(rndLength)(dim + rnd.nextInt(rndUpper))
-      val diagMaskRDD :RDD[Long] = sc.parallelize(diagMask)
-
-      /*Build Identity matrix*/
-      val rows :Array[Long] = Array.fill(dim)(0)
-      val dimB = sc.broadcast(dim)
-      val rowsRDD :RDD[Long] = sc.parallelize(rows)
-      val idenMat = rowsRDD.zipWithIndex().map{
-        case (v,rowIndex) => (rowIndex, Array.fill(dimB.value)(v).zipWithIndex.map{
-          case (v, colIndex) => if (rowIndex == colIndex) (colIndex, 1) else (colIndex, 0)
-        })
-      }//.flatMap(m => m)
-      val diaMat = new CoordinateMatrix(idenMat.join(diagMaskRDD.zipWithIndex()).map{case (i,(m,rID)) => m.map{case (colIndex, v) => new MatrixEntry(rID, colIndex,v)}}.flatMap(m => m))
-      return diaMat
-    }
-
     def bbac (Z :CoordinateMatrix, numRowC: Int, numColC :Int, W :CoordinateMatrix, distance :String, errobj :Double, niters :Int, nruns :Int, epsilon :Double) :(CoordinateMatrix, CoordinateMatrix, String) = {
       var error :Double = Double.MaxValue
       var error_now :Double = Double.MaxValue
@@ -578,30 +563,47 @@ object co_clustering_model extends App {
       var dim = 0
       var rndUpper = 0
       var rndLength = 0
-
+      var rnd :Random = null
+      var diagMask :Array[Long] = null
+      var diagMaskRDD :RDD[Long] = sc.emptyRDD
       val dist = if (distance.toLowerCase.equals("euclidean")) 0 else 1 // "divergence"
 
       for (r <- 0 until nruns) {
+        //# Define an array of size (dim(Z)[1] or dim(Z)[2]) filled with random numbers (with replacement) between 1 and numRowC
+        //[base::sample(numRowC, dim(Z)[1], replace = TRUE),]
         dim = numRowC
         rndUpper = numRowC.toInt
         rndLength = Z.numRows().toInt
-        R = diag(dim, rndUpper, rndLength)
+        rnd = new Random
+
+        /*Build Mask, i.e., [base::sample(numRowC, dim(Z)[1], replace = TRUE),]*/
+        //In scala random gives numbers between 0 inclusive and Upper exclusive.
+        val res2 = 0
+        diagMask = Array.fill(rndLength)(rnd.nextInt(rndUpper))
+        diagMaskRDD = sc.parallelize(diagMask)
+        R = diag(dim, diagMaskRDD)
 
         dim = numColC
         rndUpper = numColC.toInt
         rndLength = Z.numCols().toInt
-        C = diag (dim, rndUpper, rndLength)
+        rnd = new Random
+
+        /*Build Mask, i.e., [base::sample(numRowC, dim(Z)[1], replace = TRUE),]*/
+        //In scala random gives numbers between 0 inclusive and Upper exclusive.
+        diagMask = Array.fill(rndLength)(rnd.nextInt(rndUpper))
+        diagMaskRDD = sc.parallelize(diagMask)
+        C = diag (dim, diagMaskRDD)
 
         for (s <- 0 until niters) {
           //Row estimation
           val rs = coCavg(dist, "row", R, Z, C, W, epsilon)
           val ra = assign_cluster(dist, Z, rs._1, rs._2, W, epsilon)
-          R  = new CoordinateMatrix(ra._1)
+          R  = ra._1
 
           //Column estimation
           val cs = coCavg(dist, "col", R, Z, C, W, epsilon)
           val ca = assign_cluster(dist, Z.transpose(), cs._1.transpose(), cs._2.transpose(), W, epsilon)
-          C  = new CoordinateMatrix(ca._1)
+          C  = ca._1
 
           if (math.abs(ca._2 - error_now) < errobj) {
             val status = "converged in " + s + " iterations"
