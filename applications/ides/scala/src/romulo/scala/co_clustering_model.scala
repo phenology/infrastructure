@@ -370,18 +370,19 @@ object co_clustering_model extends App {
     */
 
     def coCavg (dist :Double, row_col :String, R: CoordinateMatrix, Z: CoordinateMatrix, C: CoordinateMatrix, W: CoordinateMatrix, epsilon: Double) :(CoordinateMatrix,CoordinateMatrix) = {
-      println("Starting coCavg")
       val CoCavg = calculate_average(R, Z, C, W, epsilon)
+      val distB = sc.broadcast(dist)
       val byColumnAndRow = Z.toRowMatrix().rows.zipWithIndex.map {
         case (row, rowIndex) => row.toArray.zipWithIndex.map {
           case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, dist)
         }
       }.flatMap(x => x)
       val a = new CoordinateMatrix(byColumnAndRow)
+      distB.destroy()
       if (row_col.equals("row")) {
         (a, CoCavg.toBlockMatrix().multiply(C.toBlockMatrix().transpose).toCoordinateMatrix())
       } else {
-        (a, R.toBlockMatrix().multiply(CoCavg.toBlockMatrix().transpose).toCoordinateMatrix())
+        (a, R.toBlockMatrix().multiply(CoCavg.toBlockMatrix()).toCoordinateMatrix())
       }
     }
 
@@ -466,7 +467,7 @@ object co_clustering_model extends App {
             resRDD = resRDD.union(euc(i, X_Z, Y, _W, Z_rows))
           }
         }
-        res = new CoordinateMatrix(resRDD)
+        res = new CoordinateMatrix(resRDD).transpose()
       } else {
         val W_X_joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = _W.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(X.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
         val W_X = new CoordinateMatrix(W_X_joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1*m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))
