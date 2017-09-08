@@ -351,8 +351,8 @@ object co_clustering_model extends App {
       val numerator_denominator :RDD[ (Long, (Array[Double], Array[Double]))] = numerator.zipWithUniqueId().map{ case (v,i) => (i,v)}.join(denominator.zipWithUniqueId().map{case (v,i) => (i,v)})
       res = new CoordinateMatrix(numerator_denominator.map{ case (row_index,(a,b)) => a.zip(b).map(m => m._1 / m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))
 
-      mean_Z_epsilonB.destroy()
-      epsilonB.destroy()
+      //mean_Z_epsilonB.destroy()
+      //epsilonB.destroy()
 
       return res
     }
@@ -378,7 +378,7 @@ object co_clustering_model extends App {
         }
       }.flatMap(x => x)
       val a = new CoordinateMatrix(byColumnAndRow)
-      distB.destroy()
+      //distB.destroy()
       if (row_col.equals("row")) {
         (a, CoCavg.toBlockMatrix().multiply(C.toBlockMatrix().transpose).toCoordinateMatrix())
       } else {
@@ -429,8 +429,8 @@ object co_clustering_model extends App {
       val joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = W.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(Z_X_rep_Y.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
       res = joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1-m._2)}.map( m => (iB.value,m.sum)).zipWithIndex.map{ case ((row_index, v),col_index) => new MatrixEntry(row_index, col_index,v)}
 
-      numRepsB.destroy()
-      iB.destroy()
+      //numRepsB.destroy()
+      //iB.destroy()
       return res
     }
 
@@ -485,7 +485,7 @@ object co_clustering_model extends App {
 
         val joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = W_X_Y_epsilonT.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(W_Z_log_Y_epsilonT.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
         res = new CoordinateMatrix(joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1-m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))
-        epsilonB.destroy()
+        //epsilonB.destroy()
       }
 
       return res
