@@ -405,21 +405,30 @@ object co_clustering_model extends App {
     }
     */
 
-    def euc (i: Long, Z_X: CoordinateMatrix, Y: CoordinateMatrix, W: CoordinateMatrix, each :Int) :RDD[MatrixEntry] = {
-      val Y_row_i = Y.toRowMatrix().rows.zipWithIndex().filter(_._2 == i)
+    def euc (i: Long, Z_X: CoordinateMatrix, Y: CoordinateMatrix, W: CoordinateMatrix, numReps :Int) :RDD[MatrixEntry] = {
+      val iB = sc.broadcast(i)
+      val Y_row_i = Y.toRowMatrix().rows.zipWithIndex().filter(_._2 == iB.value).map(_._1.toArray).flatMap(m => m)
       var res: RDD[MatrixEntry] = sc.emptyRDD
 
-      val eachB = sc.broadcast(each)
-      val rep_Y_row_i = Y_row_i.map{ case (v, i) => v.toArray.map( m => Array.fill(eachB.value)(m))}.flatMap(m => m)
+      /*
+      To represent the rep, i.e., repeat the vector numReps we need to copy each vector value NumReps.
+      It will create a matrix (Y_row_i.size x numReps). This means we need to transpose the matrix.
+      Another option is to create a numReps x 1 matrix with value 1 and multiply by Y_row_i matrix (1 x Y_row_i.size)
+      To avoid transpose we can create the tuples and then do a groupby rowIdx (we need to make sure each row
+      array is sorted by colIdx).
+       */
+      val numRepsB = sc.broadcast(numReps)
+      val Y_row_i_RDD :RDD[Array[Double]] = Y_row_i.map( m => Array.fill(numRepsB.value)(m))
+      val Y_row_i_mat = Y_row_i_RDD.zipWithIndex().map{ case (a, colIdx) => a.zipWithIndex.map{ case (v, rowIdx) => (rowIdx, colIdx, v)}}
+      val rep_Y_row_i = Y_row_i_mat.flatMap( m => m).groupBy(_._1).map{ case (rowIdx, it) => it.toArray.sortBy(_._2).map(_._3)}
 
       val Z_X_rep_Y_joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = Z_X.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(rep_Y_row_i.zipWithUniqueId().map{ case (v,i) => (i,v)})
       val Z_X_rep_Y = new CoordinateMatrix(Z_X_rep_Y_joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => math.pow(m._1-m._2,2)).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))
 
       val joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = W.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(Z_X_rep_Y.toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
-      val iB = sc.broadcast(i)
       res = joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1-m._2)}.map( m => (iB.value,m.sum)).zipWithIndex.map{ case ((row_index, v),col_index) => new MatrixEntry(row_index, col_index,v)}
 
-      eachB.destroy()
+      numRepsB.destroy()
       iB.destroy()
       return res
     }
@@ -446,6 +455,10 @@ object co_clustering_model extends App {
 
         var resRDD :RDD[MatrixEntry] = sc.emptyRDD
 
+        /*
+          The apply creates a result for each element of the vector.
+          Hence, each iteration creates a column for the new table.
+        */
         for (i <- 0 until (Y.numRows().toInt)) {
           if (resRDD.isEmpty()) {
             resRDD = euc(i, X_Z, Y, _W, Z_rows)
