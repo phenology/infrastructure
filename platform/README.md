@@ -56,6 +56,24 @@ HADOOP_USER_NAME=pheno ./bin/hadoop dfs -copyFromLocal <path_to_data>/* /user/ph
 
 The uploaded files can also be listed using the [HDFS web-ui interface](https://github.com/nlesc-sherlock/emma/blob/223f93d91b63399cded51c52faa375ad77601fbd/hadoop.md#hadoop).
 
+In case the user wants to reduce the size of the HDFS cluster, (s)he should remove two nodes at the time since the replication factor is *3* (HDFS default's replication factor). After each removal (s)he should rebalance the cluster. To do that login to one of the nodes, become root and run **hadoop balancer**:
+```
+cd infrastructure/platform/emma
+
+# Login into pheno0
+ssh -i files/pheno.key ubuntu@pheno0.phenovari-utwente.surf-hosted.nl
+
+# Become root
+sudo -i
+
+# Run hadoop balancer
+cd /usr/lib/hadoop
+./bin/hadoop balancer -Ddfs.balancer.movedWinWidth=54000 -Ddfs.balancer.dispatcherThreads=10 -Ddfs.datanode.balance.max.concurrent.moves=10 -Ddfs.balance.bandwidthPerSec=100000000 -Ddfs.balancer.max-size-to-move=10737418200 -threshold 5sudo ./bin/hadoop balancer
+```
+If the user gets "*Error: JAVA_HOME is not set and could not be found.*", (s)he should [progate user's env variable to the root environment](https://unix.stackexchange.com/questions/6127/java-home-not-set-in-script-when-run-using-sudo).
+
+The addition of nodes does not have any upper limit, however, it also requires a rebalance.
+
 ### Minio
 [Minio](https://www.minio.io/) is a distributed object storage server built for cloud applications and devops.
 To use minio in distributed mode and have redundancy there are some pre-requisites. To understand them you should read the [distributed minio quickstart guide](https://docs.minio.io/docs/distributed-minio-quickstart-guide). 
