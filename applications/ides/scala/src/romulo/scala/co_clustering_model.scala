@@ -659,6 +659,156 @@ object co_clustering_model extends App {
     C = res_bbac._2
     status = res_bbac._3
 
+    //CLEAN RESULTS
+
+    //R
+    /*
+      #We go to remove of row-groups with 0 rows assigned
+      RT <- t(R)
+      RTRowSums <- rowSums(RT)
+      RTClean <- RT[which(RTRowSums > 0),]
+      row_clus_num <- dim(RTClean)[1]
+
+      #Collect the row-group indice for each row
+      R <- t(RTClean)
+      rIndices <- which(R > 0, arr.in=TRUE)
+      rFrame <- as.data.frame(rIndices)
+      colnames(rFrame) <- c("cell", "row_clus")
+    */
+    val RT = R.transpose()
+    val RTRowSums = RT.toIndexedRowMatrix().rows.sortBy(_.index).map(m => m.vector.toArray.sum)
+    val RTClean = RTRowSums.filter(_!=0)
+    val rows_clus_num :Int = RTClean.count().toInt
+
+    val rIndices = R.toIndexedRowMatrix().rows.sortBy(_.index).map(m => m.vector.toArray.indexOf(1)).filter(_!=0)
+
+    //C
+    /*
+      #We go to remove of col-groups with 0 rows assigned
+      CT <- t(C)
+      CTRowSums <- rowSums(CT)
+      CTClean <- CT[which(CTRowSums > 0),]
+      col_clus_num <- dim(CTClean)[1]
+
+      #Collect the col-group indice for each col
+      C <- t(CTClean)
+      cIndices <- which(C > 0, arr.in=TRUE)
+      cFrame <- as.data.frame(cIndices)
+      colnames(cFrame) <- c("year","col_clus")
+    */
+
+    val CT = C.transpose()
+    val CTRowSums = CT.toIndexedRowMatrix().rows.sortBy(_.index).map(m => m.vector.toArray.sum)
+    val CTClean = CTRowSums.filter(_!=0)
+    val cols_clus_num :Int = CTClean.count().toInt
+
+    val cIndices = C.toIndexedRowMatrix().rows.sortBy(_.index).map(m => m.vector.toArray.indexOf(1)).filter(_!=0)
+
+    //BUILD A MATRIX WITH CO_CLUSTER IDs ASSIGNED TO EACH MATRIX ENTRY OF Z
+    //We need to build a RDD of MatrixEntries and then use it to filter out from Z the values
+    //from which we will then the their mean.
+    val yearsPerGroup = cIndices.zipWithIndex().map{ case (col_clus_ID, cellID) => (cellID, col_clus_ID)}.groupBy(_._2).map{ case (col_clus_ID, a) => (col_clus_ID,a.toArray.sortBy(_._1).map(_._1.toInt))}
+    val cellsPerGroup = rIndices.zipWithIndex().map{ case (row_clus_ID, yearID)=> (yearID, row_clus_ID)}.groupBy(_._2).map{ case (row_clus_ID, a) => (row_clus_ID, a.toArray.sortBy(_._1).map(_._1.toInt))}
+
+    val num_co_clusters :Int = (rows_clus_num * cols_clus_num).toInt
+    var co_clusterIDs :Array[(Int, (Int, Int))] = Array.fill(num_co_clusters)((0,(0,0)))
+
+    var co_clusterID :Int = 0
+    for (cClus <- 0 to cols_clus_num) {
+      for (rClus <- 0 to rows_clus_num) {
+        co_clusterIDs(co_clusterID) = (rClus, (cClus, co_clusterID))
+        co_clusterID += 1
+      }
+    }
+
+    val co_clusterID_RDD = sc.parallelize(co_clusterIDs)
+    val co_clusterID_CellsID = co_clusterID_RDD.join(cellsPerGroup).map{ case (rClus, ((cClus, co_clusteID), a)) => (cClus, (co_clusterID, a))}
+    val co_clusterID_CellsID_YearsID = co_clusterID_CellsID.join(yearsPerGroup).map{ case (cClus, ((co_clusterID, rA), cA)) => (co_clusterID, (rA, cA))}
+
+    /*
+      This matrix contains the co_clustering values per Matrix Entry.
+      If you take
+     */
+
+    val co_clustering_res_IDs :RDD[MatrixEntry] = co_clusterID_CellsID_YearsID.map(m => {
+      val numEntries :Int =  (m._2._1.length * m._2._1.length)
+      var listEntries :Array[MatrixEntry] = Array.fill(numEntries)(new MatrixEntry(0,0,0))
+      var entryID = 0
+      for (rIndex <- m._2._1) {
+        for (cIndex <- m._2._2) {
+          listEntries(entryID) = new MatrixEntry(rIndex, cIndex, m._1.toDouble)
+        }
+      }
+      listEntries
+      }
+    ).flatMap(m => m)
+
+    //CREATE CO_CLUSTER MATRIX FOR KMEANS
+    /*
+      all_years <- seq(1,dim(Z)[2], 1)
+      all_cells <- seq(1,dim(Z)[1], 1)
+
+      co_clusters <- matrix(, row_clus_num, col_clus_num)
+
+      for (col_clus_ID in (1:col_clus_num)){
+        years <- cFrame[cFrame$col_clus == col_clus_ID,]$year
+        for (row_clus_ID in (1:row_clus_num)) {
+          cells <- rFrame[rFrame$row_clus == row_clus_ID,]$cell
+          #mask_clust[row_clus_ID, col_clus_ID]
+          other_years <- !(all_years %in% (years))
+          other_cells <- !(all_cells %in% (cells))
+          co_clusters[row_clus_ID, col_clus_ID] <- round(mean(Z[other_cells, other_years]))
+        }
+      }
+    */
+
+    val co_clustering_RDD = co_clustering_res_IDs.map( n => ((n.i, n.j), n.value))
+    val Z_RDD = Z.entries.map(m => ( (m.i, m.j), m.value))
+    val Z_co_clustering_RDD :RDD[((Long, Long), (Double, Double))] = Z_RDD.join(co_clustering_RDD)
+
+    val co_clusters :RDD[(Double, Double)]= Z_co_clustering_RDD.map{ case ((rIndex, cIndex), (v, co_clusID)) => (co_clusID, v)}.groupBy(_._1).map{ case (co_clusID, a) => (co_clusID, (a.toArray.sum/a.toArray.length))}
+
+    //BUILD A MATRIX FOR EACH COL_CLUSTER WITH AVERAGE SPRING-INDEX
+    /*
+      col_clus_matrices <- matrix(, dim(Z)[1], col_clus_num)
+      for (col_clus_ID in (1:col_clus_num)){
+        for (row_clus_ID in (1:row_clus_num)) {
+          #Set all the cells in row_clus_ID to the average value or co_cluster_ID
+          cells_to_set <- rFrame[rFrame$row_clus == row_clus_ID,]$cell
+
+          #Set co_cluster average
+          col_clus_matrices[cells_to_set, col_clus_ID] = co_clusters[row_clus_ID, col_clus_ID]
+        }
+      }
+    */
+
+    val co_clusterID_B = sc.broadcast(co_clusterIDs)
+    //Getting the matrix for co_clus 0. However, it does not seem to work because the cIndex of the input matrix.
+    //We meed to get all averages for the row groups which belong to a single col_group.
+    val clusIDB = sc.broadcast(1)
+    val col_clus_matrices = co_clustering_RDD.map{ case (p,i) => (i,p)}.filter(m => m._1 == clusIDB.value).join(co_clusters).map{case (clusID, ((rIndex, cIndex), avg)) => new MatrixEntry(rIndex, cIndex, avg)}
+
+    //BUILD RASTERS
+    /*
+      rasters <- vector("list", col_clus_num)
+      for (col_clus_ID in (1:col_clus_num)){
+        years <- cFrame[cFrame$col_clus == col_clus_ID,]$year
+
+        res <- rep(NA, ncell(mask))
+        res[Zindex] = col_clus_matrices[,col_clus_ID]
+        mat <- matrix(res, nrow(mask), ncol(mask))
+        raster <- raster(mat)
+        projection(raster) <- projection(mask)
+        extent(raster) <- extent(mask)
+        res(raster) <- res(mask)
+        plot(raster, main = years)
+        #readline(prompt="Press [enter] to continue once you see a plot!!!")
+      }
+    */
+
+
+    //KMEANS
+
     //Save Ouput
   }
 }
