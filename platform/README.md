@@ -5,22 +5,22 @@ All the information in how to manage, up- and down- load data, and interact with
 Once the platform is up and running, the user only needs to upload the input data to the correct storage layer and then the platform is ready for [application developement](../applications).
 
 ## Emma
-Emma is a project where ansible is used to setup a Spark cluster with GeoTrellis and SciSpark modules, and using for storage two flavors of storage, as file-based HDFS and GlusterFS and as object-based Minio (it has the same API as Amazon S3). To install the platform the user should read the instructions detailed in [**emma's** README](https://github.com/nlesc-sherlock/emma/blob/master/README.md).
+Emma is a project where ansible is used to setup a Spark cluster with GeoTrellis and SciSpark modules, and using for storage two flavors of storage, as file-based HDFS and GlusterFS and as object-based Minio (it has the same API as Amazon S3). 
 
-**For this project the platform provision should only install a light version of the platform**. Such light platform does not have Docker-swarm and GlusterFS. To install such platform the user instead of running **ansible-playbook install_platform.yml**, as mentioned in [provision section](https://github.com/nlesc-sherlock/emma/blob/documentation/ansible.md#provision), the user should run the following:
+**For this project the platform provision should only install a light version of the platform**. Such light platform does not have Docker-swarm and GlusterFS. To install such platform the user instead of running **ansible-playbook install_platform.yml**, as mentioned in [provision section](https://github.com/nlesc-sherlock/emma/blob/phenology/ansible.md#provision), the user should run the following:
 ```
 ansible-playbook playbooks/install_spark.yml
 ```
+* To use an existing plattform, contact the owner listed below
 
-The platform only needs to be installed once. Once it is installed the services, e.g., Hadoop and Spark, are started using the following command:
-```
-ansible-playbook start_platform.yml
-```
+Cloud provider | Cluster name | Owner/contact person
+--- | --- | --- 
+SURF-Sara HPC cloud | pheno | Raul/Romulo 
 
-To shutdown the platform just run the following command:
-```
-ansible-playbook shutdown_platform.yml
-```
+The owner will email a zip folder with all the configuration parameters. Unzip the folder and follow the instructions. Before that we recommend to [install ansible](https://github.com/nlesc-sherlock/emma/blob/master/ansible.md#install-ansible).
+
+* To install the platform the user should read the instructions detailed in [**emma's** set up](https://github.com/nlesc-sherlock/emma/blob/master/README.md#setup-environment). This assumes that you use an Ubuntu machine or that you have Windows 10 with [**WSL**](https://msdn.microsoft.com/en-us/commandline/wsl/install_guide). If not, go to [**emma's** README](https://github.com/nlesc-sherlock/emma/blob/master/README.md).
+* To update the **Hadoop** and **Spark** cluster of your platform please follow the instructions in [**emma's update existent platform**](https://github.com/nlesc-sherlock/emma/blob/master/ansible.md#update-an-existent-platform).
 
 ## Data loading
 The platform provides two storage levels, a block-based storage through Hadoop Distributed FileSystem (HDFS) and a object-based sotrage through Minio.
@@ -50,6 +50,9 @@ Not it is time to upload some data. The following example shows how to upload th
 ```
 # Copy the files
 ./bin/hadoop dfs -copyFromLocal <path_to_spring-index>/spring-index/ /user/hadoop/
+
+# In case you need to load into a specific user directory and you do not have write permissions
+HADOOP_USER_NAME=pheno ./bin/hadoop dfs -copyFromLocal <path_to_data>/* /user/pheno/
 
 # List the uploaded files
 ./bin/hadoop dfs -ls /user/hadoop/spring-index/
