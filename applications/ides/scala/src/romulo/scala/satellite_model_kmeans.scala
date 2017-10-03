@@ -13,7 +13,6 @@ import org.apache.hadoop.io.{SequenceFile, _}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.clustering.{KMeans, KMeansModel}
 import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry, RowMatrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
 
@@ -29,6 +28,7 @@ object satellite_model_kmeans extends App {
     val masterURL = "spark://emma0.emma.nlesc.nl:7077"
     val sc = new SparkContext(new SparkConf().setAppName(appName).setMaster(masterURL))
 
+    //OPERATION MODE
     var inpB_rdd_offline_mode = true
     var inpA_rdd_offline_mode = true
     var matrix_offline_mode = true
@@ -64,7 +64,8 @@ object satellite_model_kmeans extends App {
     val save_rdds = true
     val save_matrix = true
 
-    //Check offline modes
+
+    // OPERATION VALIDATION
     var conf = sc.hadoopConfiguration
     var fs = org.apache.hadoop.fs.FileSystem.get(conf)
 
@@ -77,7 +78,7 @@ object satellite_model_kmeans extends App {
     var inpA_grid_path = out_path + inpA_dir + "_grid"
     var grid0_path = out_path + inpB_dir + "_grid0"
     var grid0_index_path = out_path + inpB_dir + "_grid0_index"
-    var matrix_path = out_path + inpB_dir + "_matrix"
+    var matrix_path = out_path + inpB_dir + "_matrix" + "_" + first_year + "_" + last_year
     var metadata_path = out_path + inpB_dir + "_metadata"
 
     val inpB_rdd_offline_exists = fs.exists(new org.apache.hadoop.fs.Path(inpB_grid_path))
@@ -121,7 +122,7 @@ object satellite_model_kmeans extends App {
     }
     println(num_kmeans)
     var kmeans_model_paths: Array[String] = Array.fill[String](num_kmeans)("")
-    var wssse_path: String = out_path + inpB_path + "/" + numIterations + "_wssse"
+    var wssse_path: String = out_path + "/" + numIterations + "_wssse" + "_" + first_year + "_" + last_year
     var geotiff_hdfs_paths: Array[String] = Array.fill[String](num_kmeans)("")
     var geotiff_tmp_paths: Array[String] = Array.fill[String](num_kmeans)("")
     var numClusters_id = 0
@@ -129,7 +130,7 @@ object satellite_model_kmeans extends App {
     if (num_kmeans > 1) {
       numClusters_id = 0
       cfor(minClusters)(_ <= maxClusters, _ + stepClusters) { numClusters =>
-        kmeans_model_paths(numClusters_id) = out_path + inpB_path + "/kmeans_model_" + band_num + "_" + numClusters + "_" + numIterations
+        kmeans_model_paths(numClusters_id) = out_path + "/kmeans_model_" + band_num + "_" + numClusters + "_" + numIterations + "_" + first_year + "_" + last_year
 
         //Check if the file exists
         val kmeans_exist = fs.exists(new org.apache.hadoop.fs.Path(kmeans_model_paths(numClusters_id)))
@@ -139,20 +140,20 @@ object satellite_model_kmeans extends App {
           kmeans_offline_mode = false
         }
 
-        geotiff_hdfs_paths(numClusters_id) = out_path + inpB_path + "/clusters_" + band_num + "_" + numClusters + "_" + numIterations
-        geotiff_tmp_paths(numClusters_id) = "/tmp/clusters_" + band_num + "_" + inpB_path + "_" + numClusters + "_" + numIterations
+        geotiff_hdfs_paths(numClusters_id) = out_path + "/clusters_" + band_num + "_" + numClusters + "_" + numIterations + "_" + first_year + "_" + last_year
+        geotiff_tmp_paths(numClusters_id) = "/tmp/clusters_" + band_num + "_" + numClusters + "_" + numIterations
         numClusters_id += 1
       }
       kmeans_offline_mode = false
     } else {
-      kmeans_model_paths(0) = out_path + inpB_path + "/kmeans_model_" + band_num + "_" + minClusters + "_" + numIterations
+      kmeans_model_paths(0) = out_path + "/kmeans_model_" + band_num + "_" + minClusters + "_" + numIterations + "_" + first_year + "_" + last_year
       val kmeans_offline_exists = fs.exists(new org.apache.hadoop.fs.Path(kmeans_model_paths(0)))
       if (kmeans_offline_mode != kmeans_offline_exists) {
         println("\"Kmeans\" offline mode is not set properly, i.e., either it was set to false and the required file does not exist or vice-versa. We will reset it to " + kmeans_offline_exists.toString())
         kmeans_offline_mode = kmeans_offline_exists
       }
-      geotiff_hdfs_paths(0) = out_path + inpB_path + "/clusters_" + band_num + "_" + minClusters + "_" + numIterations
-      geotiff_tmp_paths(0) = "/tmp/clusters_" + band_num + "_" + inpB_path + "_" + minClusters + "_" + numIterations
+      geotiff_hdfs_paths(0) = out_path + "/clusters_" + band_num + "_" + minClusters + "_" + numIterations + "_" + first_year + "_" + last_year
+      geotiff_tmp_paths(0) = "/tmp/clusters_" + band_num + "_" + minClusters + "_" + numIterations
     }
 
     //Global variables
@@ -166,9 +167,8 @@ object satellite_model_kmeans extends App {
     var num_cols_rows: (Int, Int) = (0, 0)
     var cellT: CellType = UByteCellType
     var mask_tile0: Tile = new SinglebandGeoTiff(geotrellis.raster.ArrayTile.empty(cellT, num_cols_rows._1, num_cols_rows._2), projected_extent.extent, projected_extent.crs, Tags.empty, GeoTiffOptions.DEFAULT).tile
-    var cells_size: Long = 0
-    var inpA_cells_size: Long = 0
-    var inpB_cells_size: Long = 0
+    //We are comparing 2 data sets only
+    var cells_size: Long = 2
     var t0: Long = 0
     var t1: Long = 0
 
@@ -187,8 +187,10 @@ object satellite_model_kmeans extends App {
       value
     }
 
-    t0 = System.nanoTime()
+    //LOAD GeoTiffs
 
+    // GeoTiffs A
+    t0 = System.nanoTime()
     //Load Mask
     if (toBeMasked) {
       val mask_tiles_RDD = sc.hadoopGeoTiffRDD(mask_path).values
@@ -204,21 +206,19 @@ object satellite_model_kmeans extends App {
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
-    mask_tile0.size
-
     t0 = System.nanoTime()
     if (inpA_rdd_offline_mode) {
       inpA_grids_RDD = sc.objectFile(inpA_grid_path)
     } else {
-      //Lets load MODIS Singleband GeoTiffs and return RDD just with the tiles.
-      val inpA_geos_RDD = sc.hadoopGeoTiffRDD(inpA_filepath, pattern)
+      val inpA_geos_RDD = sc.hadoopMultibandGeoTiffRDD(inpB_filepath, pattern)
       val inpA_tiles_RDD = inpA_geos_RDD.values
 
+      val band_numB :Broadcast[Int] = sc.broadcast(band_num)
       if (toBeMasked) {
         val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
-        inpA_grids_RDD = inpA_tiles_RDD.map(m => m.localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000))
+        inpA_grids_RDD = inpA_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000).filter(!_.isNaN))
       } else {
-        inpA_grids_RDD = inpA_tiles_RDD.map(m => m.toArrayDouble())
+        inpA_grids_RDD = inpA_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble().filter(!_.isNaN))
       }
 
       //Store in HDFS
@@ -232,11 +232,11 @@ object satellite_model_kmeans extends App {
     inpA_grids = inpA_grids_withIndex.filterByRange(years_range._1, years_range._2).values
 
     var inpA_grid0_index: RDD[Double] = inpA_grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m)
-    inpA_cells_size = inpA_grid0_index.count().toInt
-    println("Number of cells is: " + inpA_cells_size)
+
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
+    //GeoTiffs B
     t0 = System.nanoTime()
     if (inpB_rdd_offline_mode) {
       inpB_grids_RDD = sc.objectFile(inpB_grid_path)
@@ -273,9 +273,9 @@ object satellite_model_kmeans extends App {
       //Get Index for each Cell
       val grids_withIndex = inpB_grids_RDD.zipWithIndex().map { case (e, v) => (v, e) }
       if (toBeMasked) {
-        grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.filter(m => m._1 != -1000.0).map { case (v, i) => (i) }
+        grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.filter(m => m._1 != -1000.0).filter(m => !m._1.isNaN).map { case (v, i) => (i) }
       } else {
-        grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.map { case (v, i) => (i) }
+        grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).filter(m => !m.isNaN).zipWithIndex.map { case (v, i) => (i) }
       }
 
       //Get the Tile's grid
@@ -283,9 +283,9 @@ object satellite_model_kmeans extends App {
 
       //Lets filter out NaN
       if (toBeMasked) {
-        inpB_grids_RDD = inpB_grids_RDD.map(m => m.filter(m => m != -1000.0))
+        inpB_grids_RDD = inpB_grids_RDD.map(m => m.filter(m => m != -1000.0).filter(m => !m.isNaN))
       } else {
-        inpB_grids_RDD = inpB_grids_RDD
+        inpB_grids_RDD = inpB_grids_RDD.map(m => m.filter(!_.isNaN))
       }
 
       //Store data in HDFS
@@ -313,51 +313,28 @@ object satellite_model_kmeans extends App {
     //Filter out the range of years:
     inpB_grids = inpB_grids_withIndex.filterByRange(years_range._1, years_range._2).values
 
-    var inpB_tile0_index: RDD[Double] = inpB_grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m)
-    inpB_cells_size = inpB_tile0_index.count().toInt
-    println("Number of cells is: " + inpB_cells_size)
-
-    if (inpA_cells_size != inpB_cells_size){
-      println("Cells size differs: " + inpA_cells_size + " and " + inpB_cells_size)
-      System.exit(0)
-    } else {
-      cells_size = inpA_cells_size
-    }
-
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
+    //MATRIX
+    t0 = System.nanoTime()
     var grids_matrix: RDD[Vector] = sc.emptyRDD
-
-    val inp_grids_tuple :RDD[(Long, (Array[Double], Array[Double]))] = inpA_grids.zipWithUniqueId().map{ case (v,i) => (i,v)}.join(inpB_grids.zipWithUniqueId().map{case (v,i) => (i,v)})
-    val inp_grids_arr :RDD[(Long, Array[Array[Double]])] = inp_grids_tuple.map{ case (i, (a1, a2)) => (i, Array(a1,a2))}
-    val inp_grids :RDD[Array[Double]] = inp_grids_arr.sortBy(_._1).map(_._2).flatMap( m => m)
 
     if (matrix_offline_mode) {
       grids_matrix = sc.objectFile(matrix_path)
     } else {
+      val inp_grids :RDD[Array[Double]] = inpA_grids.flatMap(m => m).zipWithIndex().map{ case (v,i) => (i,v)}.join(inpB_grids.flatMap(m => m).zipWithIndex().map{case (v,i) => (i,v)}).sortByKey(true).map{case (i, (a1,a2)) => Array(a1, a2)}
       //Dense Vector
-      //val mat :RowMatrix = new RowMatrix(inp_grids.map(m => Vectors.dense(m)))
+      //grids_matrix = inp_grids.map(m => Vectors.dense(m))
       //Sparse Vector
       val cells_sizeB = sc.broadcast(cells_size)
-      val mat: RowMatrix = new RowMatrix(inp_grids.map(m => m.zipWithIndex).map(m => m.filter(!_._1.isNaN)).map(m => Vectors.sparse(cells_sizeB.value.toInt, m.map(v => v._2), m.map(v => v._1))))
-      cells_sizeB.destroy()
-
-      // Split the matrix into one number per line.
-      val byColumnAndRow = mat.rows.zipWithIndex.map {
-        case (row, rowIndex) => row.toArray.zipWithIndex.map {
-          case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, number)
-        }
-      }.flatMap(x => x)
-
-      val matt: CoordinateMatrix = new CoordinateMatrix(byColumnAndRow)
-      val matt_T = matt.transpose()
-      grids_matrix = matt_T.toIndexedRowMatrix().rows.sortBy(_.index).map(_.vector)
+      grids_matrix = inp_grids.map(m => m.zipWithIndex).map(m => m.filter(!_._1.isNaN)).map(m => Vectors.sparse(cells_sizeB.value.toInt, m.map(v => v._2), m.map(v => v._1)))
       grids_matrix.saveAsObjectFile(matrix_path)
     }
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
+    //KMEANS TRAINING
     t0 = System.nanoTime()
     //Global variables
     var kmeans_models :Array[KMeansModel] = new Array[KMeansModel](num_kmeans)
@@ -419,6 +396,7 @@ object satellite_model_kmeans extends App {
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
+    // KMEANS CLUSTERING
     t0 = System.nanoTime()
     //Cache it so kmeans is more efficient
     grids_matrix.cache()
@@ -438,15 +416,29 @@ object satellite_model_kmeans extends App {
     //CREATE GeoTiffs
     t0 = System.nanoTime()
     numClusters_id = 0
+    grid0_index.cache()
+    grid0.cache()
     val grid0_index_I = grid0_index.zipWithIndex().map{ case (v,i) => (i,v)}
-    val num_cells = kmeans_res(0).count().toInt
-    val cells_per_year = num_cells/years.length
+    grid0_index_I.cache()
+    grid0_index.unpersist()
+    kmeans_res(0).cache()
+    var num_cells = kmeans_res(0).count().toInt
+    kmeans_res(0).unpersist()
+    var cells_per_year = num_cells / ((last_year-first_year)+1)
+    println(cells_per_year)
+    println(num_cells)
+    val cells_per_yearB = sc.broadcast(cells_per_year)
+
     cfor(minClusters)(_ <= maxClusters, _ + stepClusters) { numClusters =>
       //Merge two RDDs, one containing the clusters_ID indices and the other one the indices of a Tile's grid cells
       var year :Int = 0
+      val kmeans_res_zip = kmeans_res(numClusters_id).zipWithIndex()
+      kmeans_res_zip.cache()
       cfor(0) (_ < num_cells, _ + cells_per_year) { cellID =>
+        println("Saving GeoTiff for numClustersID: " + numClusters_id + " year: " + years(year))
+        val cellIDB = sc.broadcast(cellID)
         val kmeans_res_sing = kmeans_res(numClusters_id)
-        val cluster_cell_pos = ((kmeans_res(numClusters_id).zipWithIndex().map{ case (v,i) => (i,v)}.filterByRange(cellID, (cellID+cells_per_year-1)).join(grid0_index_I)).map{ case (k,(v,i)) => (v,i)})
+        val cluster_cell_pos = ((kmeans_res_zip.map{ case (v,i) => (i,v)}.filterByRange(cellIDB.value, (cellIDB.value+cells_per_yearB.value-1)).map{case (i,v) => (i-cellIDB.value, v)}.join(grid0_index_I)).map{ case (k,(v,i)) => (v,i)})
 
         //Associate a Cluster_IDs to respective Grid_cell
         val grid_clusters :RDD[ (Long, (Double, Option[Int]))] = grid0.leftOuterJoin(cluster_cell_pos.map{ case (c,i) => (i.toLong, c)})
@@ -460,20 +452,25 @@ object satellite_model_kmeans extends App {
         val geoTif = new SinglebandGeoTiff(cluster_cellsD, projected_extent.extent, projected_extent.crs, Tags.empty, GeoTiffOptions(compression.DeflateCompression))
 
         //Save to /tmp/
-        GeoTiffWriter.write(geoTif, geotiff_tmp_paths(numClusters_id) + "_" + years(year) + "_.tif")
+        GeoTiffWriter.write(geoTif, geotiff_tmp_paths(numClusters_id) + "_" + years(year) + ".tif")
 
         //Upload to HDFS
-        var cmd = "hadoop dfs -copyFromLocal -f " + geotiff_tmp_paths(numClusters_id) + "_" + years(year) + "_.tif" + " " + geotiff_hdfs_paths(numClusters_id) + "_" + years(year) + "_.tif"
+        var cmd = "hadoop dfs -copyFromLocal -f " + geotiff_tmp_paths(numClusters_id) + "_" + years(year) + ".tif" + " " + geotiff_hdfs_paths(numClusters_id) + "_" + years(year) + ".tif"
         Process(cmd)!
 
         //Remove from /tmp/
-        cmd = "rm -fr " + geotiff_tmp_paths(numClusters_id) + "_" + years(year) + "_.tif"
+        cmd = "rm -fr " + geotiff_tmp_paths(numClusters_id) + "_" + years(year) + ".tif"
         Process(cmd)!
 
-        numClusters_id += 1
+        cellIDB.destroy()
         year += 1
       }
+      kmeans_res_zip.unpersist()
+      numClusters_id += 1
     }
+    cells_per_yearB.destroy()
+    grid0_index_I.unpersist()
+    grid0.unpersist()
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
