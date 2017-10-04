@@ -9,7 +9,7 @@ Emma is a project where ansible is used to setup a Spark cluster with GeoTrellis
 
 **For this project the platform provision should only install a light version of the platform**. Such light platform does not have Docker-swarm and GlusterFS. To install such platform the user instead of running **ansible-playbook install_platform.yml**, as mentioned in [provision section](https://github.com/nlesc-sherlock/emma/blob/phenology/ansible.md#provision), the user should run the following:
 ```
-ansible-playbook playbooks/install_spark.yml
+ansible-playbook install_platform_light.yml
 ```
 * To use an existing plattform, contact the owner listed below
 
@@ -27,11 +27,11 @@ The platform provides two storage levels, a block-based storage through Hadoop D
 
 ### HDFS
 
-Before The user needs to download the binaries for Hadoop 2.8.0.
+Before The user needs to download the binaries for Hadoop 2.8.1.
 ```
-wget http://apache.hippo.nl/hadoop/common/hadoop-2.8.0/hadoop-2.8.0.tar.gz
-tar -xzf hadoop-2.8.0.tar.gz
-cd hadoop-2.8.0
+wget http://apache.hippo.nl/hadoop/common/hadoop-2.8.1/hadoop-2.8.1.tar.gz
+tar -xzf hadoop-2.8.1.tar.gz
+cd hadoop-2.8.1
 ```
 Copy the Hadoop configuration environment, **core-site.xml** and **hdfs-site.xml**, from one of the virtual machines. Its location at the remote machine is **/etc/hadoop/conf/** and its destination is **etc/hadoop/**.
 Once the hadoop configuration is copied it is time to test it and for that let's list the user directories.
