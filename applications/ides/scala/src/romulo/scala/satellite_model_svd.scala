@@ -229,26 +229,49 @@ object satellite_model_svd extends App {
       num_cols_rows = (deserialize(metadata(1)).asInstanceOf[Int], deserialize(metadata(2)).asInstanceOf[Int])
       cellT = deserialize(metadata(3)).asInstanceOf[CellType]
     } else {
-      val model_geos_RDD = sc.hadoopMultibandGeoTiffRDD(model_filepath, pattern)
-      val model_tiles_RDD = model_geos_RDD.values
+      if (band_num != 0) {
+        val model_geos_RDD = sc.hadoopMultibandGeoTiffRDD(model_filepath, pattern)
+        val model_tiles_RDD = model_geos_RDD.values
 
-      //Retrieve the number of cols and rows of the Tile's grid
-      val tiles_withIndex = model_tiles_RDD.zipWithIndex().map { case (v, i) => (i, v) }
-      val tile0 = (tiles_withIndex.filter(m => m._1 == 0).values.collect()) (0)
+        //Retrieve the number of cols and rows of the Tile's grid
+        val tiles_withIndex = model_tiles_RDD.zipWithIndex().map { case (v, i) => (i, v) }
+        val tile0 = (tiles_withIndex.filter(m => m._1 == 0).values.collect()) (0)
 
-      num_cols_rows = (tile0.cols, tile0.rows)
-      cellT = tile0.cellType
+        num_cols_rows = (tile0.cols, tile0.rows)
+        cellT = tile0.cellType
 
-      //Retrieve the ProjectExtent which contains metadata such as CRS and bounding box
-      val projected_extents_withIndex = model_geos_RDD.keys.zipWithIndex().map { case (e, v) => (v, e) }
-      projected_extent = (projected_extents_withIndex.filter(m => m._1 == 0).values.collect()) (0)
+        //Retrieve the ProjectExtent which contains metadata such as CRS and bounding box
+        val projected_extents_withIndex = model_geos_RDD.keys.zipWithIndex().map { case (e, v) => (v, e) }
+        projected_extent = (projected_extents_withIndex.filter(m => m._1 == 0).values.collect()) (0)
 
-      val band_numB: Broadcast[Int] = sc.broadcast(band_num)
-      if (toBeMasked) {
-        val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
-        grids_RDD = model_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())
+        val band_numB: Broadcast[Int] = sc.broadcast(band_num)
+        if (toBeMasked) {
+          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
+          grids_RDD = model_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())
+        } else {
+          grids_RDD = model_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble())
+        }
       } else {
-        grids_RDD = model_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble())
+        val model_geos_RDD = sc.hadoopGeoTiffRDD(model_filepath, pattern)
+        val model_tiles_RDD = model_geos_RDD.values
+
+        //Retrieve the number of cols and rows of the Tile's grid
+        val tiles_withIndex = model_tiles_RDD.zipWithIndex().map { case (v, i) => (i, v) }
+        val tile0 = (tiles_withIndex.filter(m => m._1 == 0).values.collect()) (0)
+
+        num_cols_rows = (tile0.cols, tile0.rows)
+        cellT = tile0.cellType
+
+        //Retrieve the ProjectExtent which contains metadata such as CRS and bounding box
+        val projected_extents_withIndex = model_geos_RDD.keys.zipWithIndex().map { case (e, v) => (v, e) }
+        projected_extent = (projected_extents_withIndex.filter(m => m._1 == 0).values.collect()) (0)
+
+        if (toBeMasked) {
+          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
+          grids_RDD = model_tiles_RDD.map(m => m.localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())
+        } else {
+          grids_RDD = model_tiles_RDD.map(m => m.toArrayDouble())
+        }
       }
 
       //Get Index for each Cell
