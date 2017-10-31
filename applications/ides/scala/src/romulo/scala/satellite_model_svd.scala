@@ -2,9 +2,8 @@
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 
 import geotrellis.proj4.CRS
-import geotrellis.raster.io.geotiff.writer.GeoTiffWriter
 import geotrellis.raster.io.geotiff.{SinglebandGeoTiff, _}
-import geotrellis.raster.{CellType, DoubleArrayTile, Tile, UByteCellType}
+import geotrellis.raster.{CellType, Tile, UByteCellType}
 import geotrellis.spark.io.hadoop._
 import geotrellis.vector.{Extent, ProjectedExtent}
 import org.apache.hadoop.io.SequenceFile.Writer
@@ -16,8 +15,6 @@ import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{SparkConf, SparkContext}
-
-import scala.sys.process._
 
 object satellite_model_svd extends App {
 
@@ -188,14 +185,27 @@ object satellite_model_svd extends App {
       satellite_grids_RDD = sc.objectFile(satellite_grid_path)
     } else {
       //Lets load MODIS Singleband GeoTiffs and return RDD just with the tiles.
-      val satellite_geos_RDD = sc.hadoopGeoTiffRDD(satellite_filepath, pattern)
-      val satellite_tiles_RDD = satellite_geos_RDD.values
+      if (band_num == 0) {
+        val satellite_geos_RDD = sc.hadoopGeoTiffRDD(satellite_filepath, pattern)
+        val satellite_tiles_RDD = satellite_geos_RDD.values
 
-      if (toBeMasked) {
-        val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
-        satellite_grids_RDD = satellite_tiles_RDD.map(m => m.localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000))
+        if (toBeMasked) {
+          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
+          satellite_grids_RDD = satellite_tiles_RDD.map(m => m.localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000))
+        } else {
+          satellite_grids_RDD = satellite_tiles_RDD.map(m => m.toArrayDouble())
+        }
       } else {
-        satellite_grids_RDD = satellite_tiles_RDD.map(m => m.toArrayDouble())
+        val satellite_geos_RDD = sc.hadoopMultibandGeoTiffRDD(satellite_filepath, pattern)
+        val satellite_tiles_RDD = satellite_geos_RDD.values
+
+        val band_numB: Broadcast[Int] = sc.broadcast(band_num)
+        if (toBeMasked) {
+          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
+          satellite_grids_RDD = satellite_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000))
+        } else {
+          satellite_grids_RDD = satellite_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble())
+        }
       }
 
       //Store in HDFS
@@ -369,8 +379,9 @@ object satellite_model_svd extends App {
       val satellite_M_Nt_Gc_blockMatrix = satellite_M_Nt_1_blockMatrix.multiply(satellite_M_1_Gc_blockMatrix)
 
       //Sc = satellite_blockMatrix.subtract(satellite_M_Nt_Gc_blockMatrix)
-      val joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = satellite_blockMatrix.toCoordinateMatrix().toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(satellite_M_Nt_Gc_blockMatrix.toCoordinateMatrix().toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
-      Sc = (new CoordinateMatrix(joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1*m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))).toBlockMatrix()
+      //val joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = satellite_blockMatrix.toCoordinateMatrix().toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(satellite_M_Nt_Gc_blockMatrix.toCoordinateMatrix().toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
+      val joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = satellite_blockMatrix.toIndexedRowMatrix().rows.map(m => (m.index, m.vector.toArray)).join(satellite_M_Nt_Gc_blockMatrix.toCoordinateMatrix().toIndexedRowMatrix().rows.map(m => (m.index, m.vector.toArray)))
+      Sc = (new CoordinateMatrix(joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1-m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))).toBlockMatrix()
 
       //save to disk
       Sc.toIndexedRowMatrix().rows.saveAsObjectFile(sc_path)
@@ -423,8 +434,8 @@ object satellite_model_svd extends App {
       val model_M_Gc_Nt_blockMatrix = model_M_Nt_Gc_blockMatrix.transpose
 
       //Mc = model_blockMatrix.subtract(model_M_Gc_Nt_blockMatrix)
-      val joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = model_blockMatrix.toCoordinateMatrix().toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)}.join(model_M_Gc_Nt_blockMatrix.toCoordinateMatrix().toRowMatrix().rows.map(_.toArray).zipWithUniqueId().map{case (v,i) => (i,v)})
-      Mc = (new CoordinateMatrix(joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1*m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))).toBlockMatrix()
+      val joined_mat :RDD[ (Long, (Array[Double], Array[Double]))] = model_blockMatrix.toIndexedRowMatrix().rows.map( m => (m.index, m.vector.toArray)).join(model_M_Gc_Nt_blockMatrix.toIndexedRowMatrix().rows.map(m => (m.index, m.vector.toArray)))
+      Mc = (new CoordinateMatrix(joined_mat.map {case (row_index, (a,b)) => a.zip(b).map(m => m._1-m._2).zipWithIndex.map{ case (v,col_index) => new MatrixEntry(row_index, col_index,v)}}.flatMap(m => m))).toBlockMatrix()
 
       //save to disk
       Mc.toIndexedRowMatrix().rows.saveAsObjectFile(mc_path)
@@ -435,48 +446,19 @@ object satellite_model_svd extends App {
     //val matrix_mul = model_blockMatrix.multiply(satellite_blockMatrix)
     val matrix_mul = Mc.multiply(Sc)
     matrix_mul.persist(StorageLevel.DISK_ONLY)
-    //val resRowMatrix: RowMatrix = new RowMatrix(matrix_mul.toIndexedRowMatrix().rows.sortBy(_.index).map(_.vector))
-    println(matrix_mul.colsPerBlock + " " + matrix_mul.colsPerBlock + " " + matrix_mul.numCols() + " " + matrix_mul.rowsPerBlock + " " + matrix_mul.rowsPerBlock + " " + matrix_mul.numRows())
-    val row_mat = matrix_mul.toIndexedRowMatrix()
-    println(row_mat.numCols() + " " + row_mat.numRows())
 
     //SVD
-    val svd: SingularValueDecomposition[RowMatrix, Matrix] = matrix_mul.toCoordinateMatrix().toRowMatrix().computeSVD(10, true)//.computeSVD(10, true)
+    val svd: SingularValueDecomposition[IndexedRowMatrix, Matrix] = matrix_mul.toIndexedRowMatrix().computeSVD(10, true)
 
     val U: IndexedRowMatrix = svd.U // The U factor is a RowMatrix.
     val s: Vector = svd.s // The singular values are stored in a local dense vector.
-    val V: Matrix = svd.V /// / The V factor is a local dense matrix.
+    val V: Matrix = svd.V // The V factor is a local dense matrix.
+    val S = Matrices.diag(s)
 
-    var U_rdd = U.rows.sortBy(_.index).map(_.vector.toArray)
-
-    //BUILD GEOTIFFS
-    //Merge two RDDs, one containing the clusters_ID indices and the other one the indices of a Tile's grid cells
-    val multi_res = sc.parallelize(s.toArray).zipWithIndex().map { case (v, i) => (i, v) }
-    val multi_cell_pos = multi_res.join(model_grid0_index.zipWithIndex().map { case (v, i) => (i, v) }).map { case (k, (v, i)) => (v, i) }
-
-    //Associate a Cluster_IDs to respective Grid_cell
-    val grid_multi = model_grid0.map { case (i, v) => if (v == -1000) (i, Double.NaN) else (i, v) }.leftOuterJoin(multi_cell_pos.map { case (c, i) => (i.toLong, c) })
-
-    //Convert all None to NaN
-    val grid_multi_res = grid_multi.sortByKey(true).map { case (k, (v, c)) => if (c == None) (k, Double.NaN) else (k, c.get.toDouble) }
-
-    //Define a Tile
-    val corr_cells: Array[Double] = grid_multi_res.values.collect()
-
-    val corr_cellsD = DoubleArrayTile(corr_cells, num_cols_rows._1, num_cols_rows._2)
-
-    val geoTif = new SinglebandGeoTiff(corr_cellsD, projected_extent.extent, projected_extent.crs, Tags.empty, GeoTiffOptions(compression.DeflateCompression))
-
-    //Save to /tmp/
-    GeoTiffWriter.write(geoTif, corr_tif_tmp)
-
-    //Upload to HDFS
-    var cmd = "hadoop dfs -copyFromLocal -f " + corr_tif_tmp + " " + corr_tif
-    Process(cmd) !
-
-    //Remove from /tmp/
-    cmd = "rm -fr " + corr_tif_tmp
-    Process(cmd) !
+    //Save into CSV files.
+    U.rows.map(m => m.vector.toArray.mkString(",")).repartition(1).saveAsTextFile(out_path + "U.csv")
+    sc.parallelize(V.rowIter.toVector.map(m => m.toArray.mkString("'")),1).saveAsTextFile(out_path + "V.csv")
+    sc.parallelize(S.rowIter.toVector.map(m => m.toArray.mkString(",")),1).saveAsTextFile(out_path + "S.csv")
 
   }
 }
