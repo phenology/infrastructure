@@ -31,13 +31,14 @@ object satellite_model_svd extends App {
     //Using spring-index model
     var model_path = "hdfs:///user/hadoop/spring-index/"
     var model_dir = "BloomFinal"
+    var model_band_num = 0
 
     //Using AVHRR Satellite data
     var satellite_path = "hdfs:///user/hadoop/avhrr/"
     var satellite_dir = "SOST"
+    var sat_band_num = 0
 
     var out_path = "hdfs:///user/pheno/svd/"
-    var band_num = 3
 
     //Years between (inclusive) 1989 - 2014
     var satellite_first_year = 1989
@@ -50,6 +51,9 @@ object satellite_model_svd extends App {
     //Mask
     val toBeMasked = true
     val mask_path = "hdfs:///user/hadoop/usa_mask.tif"
+
+    //Matrix Mode: 0 Normal, 1 SC, 2 SR
+    val matrix_mode = 0
 
     val save_rdds = true
     val save_matrix = true
@@ -185,7 +189,7 @@ object satellite_model_svd extends App {
       satellite_grids_RDD = sc.objectFile(satellite_grid_path)
     } else {
       //Lets load MODIS Singleband GeoTiffs and return RDD just with the tiles.
-      if (band_num == 0) {
+      if (sat_band_num == 0) {
         val satellite_geos_RDD = sc.hadoopGeoTiffRDD(satellite_filepath, pattern)
         val satellite_tiles_RDD = satellite_geos_RDD.values
 
@@ -199,7 +203,7 @@ object satellite_model_svd extends App {
         val satellite_geos_RDD = sc.hadoopMultibandGeoTiffRDD(satellite_filepath, pattern)
         val satellite_tiles_RDD = satellite_geos_RDD.values
 
-        val band_numB: Broadcast[Int] = sc.broadcast(band_num)
+        val band_numB: Broadcast[Int] = sc.broadcast(sat_band_num)
         if (toBeMasked) {
           val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
           satellite_grids_RDD = satellite_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000))
@@ -239,7 +243,7 @@ object satellite_model_svd extends App {
       num_cols_rows = (deserialize(metadata(1)).asInstanceOf[Int], deserialize(metadata(2)).asInstanceOf[Int])
       cellT = deserialize(metadata(3)).asInstanceOf[CellType]
     } else {
-      if (band_num != 0) {
+      if (model_band_num != 0) {
         val model_geos_RDD = sc.hadoopMultibandGeoTiffRDD(model_filepath, pattern)
         val model_tiles_RDD = model_geos_RDD.values
 
@@ -254,7 +258,7 @@ object satellite_model_svd extends App {
         val projected_extents_withIndex = model_geos_RDD.keys.zipWithIndex().map { case (e, v) => (v, e) }
         projected_extent = (projected_extents_withIndex.filter(m => m._1 == 0).values.collect()) (0)
 
-        val band_numB: Broadcast[Int] = sc.broadcast(band_num)
+        val band_numB: Broadcast[Int] = sc.broadcast(model_band_num)
         if (toBeMasked) {
           val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
           grids_RDD = model_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())
@@ -442,23 +446,46 @@ object satellite_model_svd extends App {
     }
     Mc.persist(StorageLevel.DISK_ONLY)
 
+    //SR
+    var Sr :BlockMatrix = null
+
+    //MR
+    var Mr :BlockMatrix = null
+
     //Matrix Multiplication
-    //val matrix_mul = model_blockMatrix.multiply(satellite_blockMatrix)
-    val matrix_mul = Mc.multiply(Sc)
-    matrix_mul.persist(StorageLevel.DISK_ONLY)
+    var matrix_mul :IndexedRowMatrix = null
+    var n_components :Long = 0
+
+    //Normal Matrix
+    if (matrix_mode == 0) {
+      matrix_mul = model_blockMatrix.toIndexedRowMatrix().multiply(satellite_blockMatrix.toLocalMatrix())
+      n_components = List(model_blockMatrix.numRows(), model_blockMatrix.numCols(), satellite_blockMatrix.numRows(), satellite_blockMatrix.numCols()).min
+    }
+
+    //SC Matrix
+    if (matrix_mode == 1) {
+      matrix_mul = Mc.toIndexedRowMatrix().multiply(Sc.toLocalMatrix())
+      n_components = List(Mc.numRows(), Mc.numCols(), Sc.numRows(), Sc.numCols()).min
+    }
+
+    //SR Matrix
+    if (matrix_mode == 2) {
+      matrix_mul = Mr.toIndexedRowMatrix().multiply(Sr.toLocalMatrix())
+      n_components = List(Mr.numRows(), Mr.numCols(), Sr.numRows(), Sr.numCols()).min
+    }
 
     //SVD
-    val svd: SingularValueDecomposition[IndexedRowMatrix, Matrix] = matrix_mul.toIndexedRowMatrix().computeSVD(10, true)
+    //val svd: SingularValueDecomposition[IndexedRowMatrix, Matrix] = matrix_mul.toIndexedRowMatrix().computeSVD(n_components.toInt, true)
+    val svd: SingularValueDecomposition[RowMatrix, Matrix] = matrix_mul.toRowMatrix().computeSVD(n_components.toInt, computeU = true)
 
-    val U: IndexedRowMatrix = svd.U // The U factor is a RowMatrix.
+    val U: RowMatrix = svd.U // The U factor is a RowMatrix.
     val s: Vector = svd.s // The singular values are stored in a local dense vector.
     val V: Matrix = svd.V // The V factor is a local dense matrix.
     val S = Matrices.diag(s)
 
     //Save into CSV files.
-    U.rows.map(m => m.vector.toArray.mkString(",")).repartition(1).saveAsTextFile(out_path + "U.csv")
+    U.rows.map(m => m.toArray.mkString(",")).repartition(1).saveAsTextFile(out_path + "U.csv")
     sc.parallelize(V.rowIter.toVector.map(m => m.toArray.mkString("'")),1).saveAsTextFile(out_path + "V.csv")
     sc.parallelize(S.rowIter.toVector.map(m => m.toArray.mkString(",")),1).saveAsTextFile(out_path + "S.csv")
-
   }
 }
