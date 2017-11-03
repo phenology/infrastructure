@@ -108,3 +108,13 @@ To upload data to a sub-directory follow this example:
 ```
 cd <root_dir>/<sub_dir> ; for f in `ls *`; do s3cmd put $f s3://<root_dir>/<sub_dir>/$f; done
 ```
+## Remote debugging
+To set Spark for remote debugging the user should reconfigure the Spark to only have one executor per worker. In **platoform/emma/vars/spark_vars/.yml** the user should set *spark_executor_cores* equal to *spark_worker_cores* and *spark_executor_memory* equal to *spark_worker_memory*. Such setting will allows us to open a single debugger per executor, i.e., one per node.
+
+By default **driver's debugging port** is 5005 while the **worker's debugging port** is 5006. They defined in **platoform/emma/vars/spark_vars/.yml** by the variables *worker_debug_port* and *driver_debug_port*. To have either a worker or driver *waiting on startup* the variables *worker_waiting_on_startup* and *driver_waiting_on_startup* should be set to **y**(yes), by default they are set to **n**(no). 
+
+With everything set the user should restart Spark and Jupyterhub.
+```
+ansible-playbook shutdown_platform.yml --tags "spark,jupyterhub"
+ansible-playbook start_platform.yml --tags "spark,jupyterhub"
+```
