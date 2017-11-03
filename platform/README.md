@@ -119,5 +119,4 @@ ansible-playbook shutdown_platform.yml --tags "spark,jupyterhub"
 ansible-playbook start_platform.yml --tags "spark,jupyterhub"
 ```
 
-For more debug information the user should read about [Emma's Spark debug info]().
-## Garbage collector
+For more debug configurations, such as Garbage Collector, the user should read about [Emma's Spark debug info]().
