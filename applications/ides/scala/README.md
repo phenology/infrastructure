@@ -63,3 +63,7 @@ Then close the file with:
 ```
 }}
 ```
+
+## Application debug
+To debug an application the user needs to first activate [Spark for debug mode](https://github.com/nlesc-sherlock/emma/blob/remote_debugging/spark.md#remote-debugging). For more debug configurations, such as Garbage Collector, the user should read about [Emma's Spark debug info](https://github.com/nlesc-sherlock/emma/blob/remote_debugging/spark.md#debug-mode).
+
