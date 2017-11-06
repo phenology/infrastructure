@@ -65,16 +65,18 @@ Then close the file with:
 ```
 
 ## Application debugging
-To debug an application the user needs to first activate [Spark for debug mode](https://github.com/nlesc-sherlock/emma/blob/master/spark.md#remote-debugging). For more debug configurations, such as Garbage Collector, the user should read about [Emma's Spark debug info](https://github.com/nlesc-sherlock/emma/blob/master/spark.md#debug-mode). Once Spark is set for debug mode, the user then needs to attach a debugger to the driver and one per worker. To do it the user should in the menu panel *IntelliJ IDEA * go to **Run** and then click **Debug**.
+To debug an application the first steps consists in reconfiguring [Spark to run on debug mode](https://github.com/nlesc-sherlock/emma/blob/master/spark.md#remote-debugging). For performance profiling it is also possible to configure the garbage collector and its monitoring policies. To know more please read [Emma's Spark debug info](https://github.com/nlesc-sherlock/emma/blob/master/spark.md#debug-mode). 
 
-Then click create/configure Debugger.
+Once Spark is configured to run in *debug mode*, the next step is to configure *IntelliJ IDEA* to attach a debugger to the application driver and a debugger per worker. In *IntelliJ IDEA* the user should click on **Run** and then click **Debug**.
+
+**Then click create/configure Debugger.**
 ![alt text](https://github.com/phenology/infrastructure/blob/master/applications/ides/scala/images/create_remote_debugger.png "Create remote debugger")
 
-Create a debugger for the driver.
+**Create a debugger for the driver.**
 ![alt text](https://github.com/phenology/infrastructure/blob/master/applications/ides/scala/images/debug_driver.png "Create driver's debugger")
 
-Create a debugger for a worker.
+**Create a debugger for a worker.**
 ![alt text](https://github.com/phenology/infrastructure/blob/master/applications/ides/scala/images/debug_worker.png "Create worker's debugger")
 
 
-Once they are create the user is ready to attach a debugger. In case the operation execution is too short for a debugger be attached, the user should have [*either a worker or driver waiting on startup the variables worker_waiting_on_startup and driver_waiting_on_startup should be set to y (yes), by default they are set to n (no)*](https://github.com/nlesc-sherlock/emma/blob/master/spark.md#remote-debugging).
+With all debuggers defined, the next step is to run them so they get attached to the remote processes. In case the user wants a process to wait for a debugger be attached before it runs, the user should [*set the variables worker_waiting_on_startup and driver_waiting_on_startup to y (yes), by default they are set to n (no)*](https://github.com/nlesc-sherlock/emma/blob/master/spark.md#remote-debugging).
