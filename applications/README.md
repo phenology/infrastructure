@@ -24,5 +24,5 @@ For code development it is handy to have an IDE for features such as auto-comple
 to be done by Raul ... 
 
 ## Install extra libraries
-To install extra libraries the user should read [Emma's Ansible add new modules](https://github.com/nlesc-sherlock/emma/blob/master/ansible.md#add-new-modules) and follow the [example notebooks](notebooks/examples) named **extra_libraries**.ipynb under each language.
+To install extra libraries the user should read [Emma's Ansible add new modules](https://github.com/nlesc-sherlock/emma/blob/master/ansible.md#add-new-modules) and follow the [example notebooks](notebooks/examples) named **extra_libraries**.ipynb under each language to see how to add them to the *libraries path*.
 
