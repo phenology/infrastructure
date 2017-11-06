@@ -49,8 +49,10 @@ object satellite_model_svd extends App {
     var model_last_year = 2014
 
     //Mask
-    val toBeMasked = true
-    val mask_path = "hdfs:///user/hadoop/usa_mask.tif"
+    val modToBeMasked = true
+    val satToBeMasked = true
+    val mod_mask_path = "hdfs:///user/hadoop/usa_mask_gridmet.tif"
+    val sat_mask_path = "hdfs:///user/hadoop/usa_mask.tif"
 
     //Matrix Mode: 0 Normal, 1 SC, 2 SR
     val matrix_mode = 0
@@ -63,9 +65,12 @@ object satellite_model_svd extends App {
     var fs = org.apache.hadoop.fs.FileSystem.get(conf)
 
     //Paths to store data structures for Offline runs
-    var mask_str = ""
-    if (toBeMasked)
-      mask_str = "_mask"
+    var mod_mask_str = ""
+    var sat_mask_str = ""
+    if (modToBeMasked)
+      mod_mask_str = "_mask"
+    if (satToBeMasked)
+      sat_mask_str = "_mask"
     var model_grid0_path = out_path + model_dir + "_grid0"
     var model_grid0_index_path = out_path + model_dir + "_grid0_index"
 
@@ -146,7 +151,8 @@ object satellite_model_svd extends App {
 
     var num_cols_rows: (Int, Int) = (0, 0)
     var cellT: CellType = UByteCellType
-    var mask_tile0: Tile = new SinglebandGeoTiff(geotrellis.raster.ArrayTile.empty(cellT, num_cols_rows._1, num_cols_rows._2), projected_extent.extent, projected_extent.crs, Tags.empty, GeoTiffOptions.DEFAULT).tile
+    var mod_mask_tile0: Tile = new SinglebandGeoTiff(geotrellis.raster.ArrayTile.empty(cellT, num_cols_rows._1, num_cols_rows._2), projected_extent.extent, projected_extent.crs, Tags.empty, GeoTiffOptions.DEFAULT).tile
+    var sat_mask_tile0: Tile = new SinglebandGeoTiff(geotrellis.raster.ArrayTile.empty(cellT, num_cols_rows._1, num_cols_rows._2), projected_extent.extent, projected_extent.crs, Tags.empty, GeoTiffOptions.DEFAULT).tile
     var satellite_cells_size: Long = 0
     var model_cells_size: Long = 0
     var t0: Long = 0
@@ -170,10 +176,16 @@ object satellite_model_svd extends App {
     t0 = System.nanoTime()
 
     //Load Mask
-    if (toBeMasked) {
-      val mask_tiles_RDD = sc.hadoopGeoTiffRDD(mask_path).values
+    if (modToBeMasked) {
+      val mask_tiles_RDD = sc.hadoopGeoTiffRDD(mod_mask_path).values
       val mask_tiles_withIndex = mask_tiles_RDD.zipWithIndex().map { case (e, v) => (v, e) }
-      mask_tile0 = (mask_tiles_withIndex.filter(m => m._1 == 0).filter(m => !m._1.isNaN).values.collect()) (0)
+      mod_mask_tile0 = (mask_tiles_withIndex.filter(m => m._1 == 0).filter(m => !m._1.isNaN).values.collect()) (0)
+    }
+
+    if (satToBeMasked) {
+      val mask_tiles_RDD = sc.hadoopGeoTiffRDD(sat_mask_path).values
+      val mask_tiles_withIndex = mask_tiles_RDD.zipWithIndex().map { case (e, v) => (v, e) }
+      sat_mask_tile0 = (mask_tiles_withIndex.filter(m => m._1 == 0).filter(m => !m._1.isNaN).values.collect()) (0)
     }
 
     //Local variables
@@ -193,8 +205,8 @@ object satellite_model_svd extends App {
         val satellite_geos_RDD = sc.hadoopGeoTiffRDD(satellite_filepath, pattern)
         val satellite_tiles_RDD = satellite_geos_RDD.values
 
-        if (toBeMasked) {
-          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
+        if (satToBeMasked) {
+          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(sat_mask_tile0)
           satellite_grids_RDD = satellite_tiles_RDD.map(m => m.localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000))
         } else {
           satellite_grids_RDD = satellite_tiles_RDD.map(m => m.toArrayDouble())
@@ -204,8 +216,8 @@ object satellite_model_svd extends App {
         val satellite_tiles_RDD = satellite_geos_RDD.values
 
         val band_numB: Broadcast[Int] = sc.broadcast(sat_band_num)
-        if (toBeMasked) {
-          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
+        if (satToBeMasked) {
+          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(sat_mask_tile0)
           satellite_grids_RDD = satellite_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000))
         } else {
           satellite_grids_RDD = satellite_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble())
@@ -259,8 +271,8 @@ object satellite_model_svd extends App {
         projected_extent = (projected_extents_withIndex.filter(m => m._1 == 0).values.collect()) (0)
 
         val band_numB: Broadcast[Int] = sc.broadcast(model_band_num)
-        if (toBeMasked) {
-          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
+        if (modToBeMasked) {
+          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mod_mask_tile0)
           grids_RDD = model_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())
         } else {
           grids_RDD = model_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble())
@@ -280,8 +292,8 @@ object satellite_model_svd extends App {
         val projected_extents_withIndex = model_geos_RDD.keys.zipWithIndex().map { case (e, v) => (v, e) }
         projected_extent = (projected_extents_withIndex.filter(m => m._1 == 0).values.collect()) (0)
 
-        if (toBeMasked) {
-          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mask_tile0)
+        if (modToBeMasked) {
+          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mod_mask_tile0)
           grids_RDD = model_tiles_RDD.map(m => m.localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())
         } else {
           grids_RDD = model_tiles_RDD.map(m => m.toArrayDouble())
@@ -290,7 +302,7 @@ object satellite_model_svd extends App {
 
       //Get Index for each Cell
       val grids_withIndex = grids_RDD.zipWithIndex().map { case (e, v) => (v, e) }
-      if (toBeMasked) {
+      if (modToBeMasked) {
         model_grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.filter(m => m._1 != -1000.0).map { case (v, i) => (i) }
       } else {
         model_grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.map { case (v, i) => (i) }
@@ -300,7 +312,7 @@ object satellite_model_svd extends App {
       model_grid0 = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.map { case (v, i) => (i, v) }
 
       //Lets filter out NaN
-      if (toBeMasked) {
+      if (modToBeMasked) {
         model_grids_RDD = grids_RDD.map(m => m.filter(m => m != -1000.0))
       } else {
         model_grids_RDD = grids_RDD
