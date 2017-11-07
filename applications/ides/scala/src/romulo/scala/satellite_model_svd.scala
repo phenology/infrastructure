@@ -518,14 +518,21 @@ object satellite_model_svd extends App {
     var v_geotiff_hdfs_paths :Array[String] = Array.fill[String](n_components.toInt)("")
     var v_geotiff_tmp_paths :Array[String] = Array.fill[String](n_components.toInt)("")
 
+    //Create dirs in HDFS
+    var cmd = "hadoop dfs -mkdir " + out_path + "u_tiffs/"
+    Process(cmd)!
+
+    cmd = "hadoop dfs -mkdir " + out_path + "v_tiffs/"
+    Process(cmd)!
+
     cfor(0)(_ < n_components, _ + 1) { k =>
-      u_geotiff_hdfs_paths(k) =  out_path + "/u_tiffs/svd_u_" + k + "_" + n_components + matrix_mode_str + ".tif"
+      u_geotiff_hdfs_paths(k) =  out_path + "u_tiffs/svd_u_" + k + "_" + n_components + matrix_mode_str + ".tif"
       u_geotiff_tmp_paths(k) = "/tmp/svd_u_" + k + "_" + n_components + matrix_mode_str + ".tif"
       if (fs.exists(new org.apache.hadoop.fs.Path(u_geotiff_hdfs_paths(k)))) {
         println("There is already a GeoTiff with the path: " + u_geotiff_hdfs_paths(k) + ". Please make either a copy or move it to another location, otherwise, it will be over-written.")
       }
 
-      v_geotiff_hdfs_paths(k) =  out_path + "/v_tiffs/svd_v_" + k + "_" + n_components + matrix_mode_str + ".tif"
+      v_geotiff_hdfs_paths(k) =  out_path + "v_tiffs/svd_v_" + k + "_" + n_components + matrix_mode_str + ".tif"
       v_geotiff_tmp_paths(k) = "/tmp/svd_v_" + k + "_" + n_components + matrix_mode_str + ".tif"
       if (fs.exists(new org.apache.hadoop.fs.Path(v_geotiff_hdfs_paths(k)))) {
         println("There is already a GeoTiff with the path: " + v_geotiff_hdfs_paths(k) + ". Please make either a copy or move it to another location, otherwise, it will be over-written.")
@@ -542,9 +549,26 @@ object satellite_model_svd extends App {
     val S = Matrices.diag(s)
 
     //Save into CSV files.
-    U.rows.map(m => m.toArray.mkString(",")).repartition(1).saveAsTextFile(out_path + "U" + matrix_mode_str +".csv")
-    sc.parallelize(V.rowIter.toVector.map(m => m.toArray.mkString("'")),1).saveAsTextFile(out_path + "V" + matrix_mode_str +".csv")
-    sc.parallelize(S.rowIter.toVector.map(m => m.toArray.mkString(",")),1).saveAsTextFile(out_path + "S" + matrix_mode_str +".csv")
+    val u_path = out_path + "U" + matrix_mode_str +".csv"
+    if (fs.exists(new org.apache.hadoop.fs.Path(u_path))) {
+      cmd = "hadoop dfs -rm -r " + u_path
+      Process(cmd)!
+    }
+    U.rows.map(m => m.toArray.mkString(",")).repartition(1).saveAsTextFile(u_path)
+
+    val v_path = out_path + "V" + matrix_mode_str +".csv"
+    if (fs.exists(new org.apache.hadoop.fs.Path(v_path))) {
+      cmd = "hadoop dfs -rm -r " + v_path
+      Process(cmd)!
+    }
+    sc.parallelize(V.rowIter.toVector.map(m => m.toArray.mkString("'")),1).saveAsTextFile(v_path)
+
+    val s_path = out_path + "S" + matrix_mode_str +".csv"
+    if (fs.exists(new org.apache.hadoop.fs.Path(s_path))) {
+      cmd = "hadoop dfs -rm -r " + s_path
+      Process(cmd)!
+    }
+    sc.parallelize(S.rowIter.toVector.map(m => m.toArray.mkString(",")),1).saveAsTextFile(s_path)
 
     //Create GeoTiffs for U (dimension is M(A) x n_components)
     t0 = System.nanoTime()
