@@ -75,6 +75,13 @@ object satellite_model_svd extends App {
       mod_mask_str = "_mask"
     if (satToBeMasked)
       sat_mask_str = "_mask"
+
+    val matrix_mode_str = matrix_mode match {
+      case 1 => "_Sc_Mc"
+      case 2 => "_Sr_Mr"
+      case _ => ""
+    }
+
     var model_grid0_path = out_path + model_dir + "_grid0"
     var model_grid0_index_path = out_path + model_dir + "_grid0_index"
     var satellite_grid0_path = out_path + satellite_dir + "_grid0"
@@ -511,15 +518,15 @@ object satellite_model_svd extends App {
     var v_geotiff_hdfs_paths :Array[String] = Array.fill[String](n_components.toInt)("")
     var v_geotiff_tmp_paths :Array[String] = Array.fill[String](n_components.toInt)("")
 
-    cfor(0)(_ <= n_components, _ + 1) { k =>
-      u_geotiff_hdfs_paths(k) =  out_path + "/svd_u_" + n_components + ".tif"
-      u_geotiff_tmp_paths(k) = "/tmp/svd_u_" + n_components + ".tif"
+    cfor(0)(_ < n_components, _ + 1) { k =>
+      u_geotiff_hdfs_paths(k) =  out_path + "/u_tiffs/svd_u_" + k + "_" + n_components + matrix_mode_str + ".tif"
+      u_geotiff_tmp_paths(k) = "/tmp/svd_u_" + k + "_" + n_components + matrix_mode_str + ".tif"
       if (fs.exists(new org.apache.hadoop.fs.Path(u_geotiff_hdfs_paths(k)))) {
         println("There is already a GeoTiff with the path: " + u_geotiff_hdfs_paths(k) + ". Please make either a copy or move it to another location, otherwise, it will be over-written.")
       }
 
-      v_geotiff_hdfs_paths(k) =  out_path + "/svd_v_" + n_components + ".tif"
-      v_geotiff_tmp_paths(k) = "/tmp/svd_v_" + n_components + ".tif"
+      v_geotiff_hdfs_paths(k) =  out_path + "/v_tiffs/svd_v_" + k + "_" + n_components + matrix_mode_str + ".tif"
+      v_geotiff_tmp_paths(k) = "/tmp/svd_v_" + k + "_" + n_components + matrix_mode_str + ".tif"
       if (fs.exists(new org.apache.hadoop.fs.Path(v_geotiff_hdfs_paths(k)))) {
         println("There is already a GeoTiff with the path: " + v_geotiff_hdfs_paths(k) + ". Please make either a copy or move it to another location, otherwise, it will be over-written.")
       }
@@ -535,14 +542,14 @@ object satellite_model_svd extends App {
     val S = Matrices.diag(s)
 
     //Save into CSV files.
-    U.rows.map(m => m.toArray.mkString(",")).repartition(1).saveAsTextFile(out_path + "U.csv")
-    sc.parallelize(V.rowIter.toVector.map(m => m.toArray.mkString("'")),1).saveAsTextFile(out_path + "V.csv")
-    sc.parallelize(S.rowIter.toVector.map(m => m.toArray.mkString(",")),1).saveAsTextFile(out_path + "S.csv")
+    U.rows.map(m => m.toArray.mkString(",")).repartition(1).saveAsTextFile(out_path + "U" + matrix_mode_str +".csv")
+    sc.parallelize(V.rowIter.toVector.map(m => m.toArray.mkString("'")),1).saveAsTextFile(out_path + "V" + matrix_mode_str +".csv")
+    sc.parallelize(S.rowIter.toVector.map(m => m.toArray.mkString(",")),1).saveAsTextFile(out_path + "S" + matrix_mode_str +".csv")
 
     //Create GeoTiffs for U (dimension is M(A) x n_components)
     t0 = System.nanoTime()
     val mod_grid0_index_I = model_grid0_index.zipWithIndex().map{ case (v,i) => (i,v)}
-    cfor(0)(_ <= n_components, _ + 1) { k =>
+    cfor(0)(_ < n_components, _ + 1) { k =>
       //Merge two RDDs, one containing the clusters_ID indices and the other one the indices of a Tile's grid cells
       val kB = sc.broadcast(k)
       val U_k_RDD = U.rows.map(_.toArray.zipWithIndex.filter(_._2 == kB.value).map{ case (v,i) => v}).flatMap(m => m)
