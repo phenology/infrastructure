@@ -147,7 +147,7 @@ object satellite_model_svd extends App {
     var projected_extent = new ProjectedExtent(new Extent(0, 0, 0, 0), CRS.fromName("EPSG:3857"))
     var model_grid0: RDD[(Long, Double)] = sc.emptyRDD
     var model_grid0_index: RDD[Long] = sc.emptyRDD
-    var grids_RDD: RDD[Array[Double]] = sc.emptyRDD
+    var mod_grids_RDD: RDD[Array[Double]] = sc.emptyRDD
     var model_grids_RDD: RDD[Array[Double]] = sc.emptyRDD
     var model_grids: RDD[Array[Double]] = sc.emptyRDD
     val rows = sc.parallelize(Array[Double]()).map(m => Vectors.dense(m))
@@ -156,6 +156,7 @@ object satellite_model_svd extends App {
 
     var satellite_grid0: RDD[(Long, Double)] = sc.emptyRDD
     var satellite_grid0_index: RDD[Long] = sc.emptyRDD
+    var sat_grids_RDD: RDD[Array[Double]] = sc.emptyRDD
     var satellite_grids_RDD: RDD[Array[Double]] = sc.emptyRDD
     var satellite_grids: RDD[Array[Double]] = sc.emptyRDD
     var satellite_summary: MultivariateStatisticalSummary = new RowMatrix(rows).computeColumnSummaryStatistics()
@@ -221,9 +222,9 @@ object satellite_model_svd extends App {
 
         if (satToBeMasked) {
           val mask_tile_broad: Broadcast[Tile] = sc.broadcast(sat_mask_tile0)
-          satellite_grids_RDD = satellite_tiles_RDD.map(m => m.localInverseMask(mask_tile_broad.value, 1, -2000).toArrayDouble().filter(_ != -2000).map(m => if (m == -1000) Double.NaN else m))
+          sat_grids_RDD = satellite_tiles_RDD.map(m => m.localInverseMask(mask_tile_broad.value, 1, -2000).toArrayDouble().map(m => if (m == -1000) Double.NaN else m))
         } else {
-          satellite_grids_RDD = satellite_tiles_RDD.map(m => m.toArrayDouble())
+          sat_grids_RDD = satellite_tiles_RDD.map(m => m.toArrayDouble())
         }
       } else {
         val satellite_geos_RDD = sc.hadoopMultibandGeoTiffRDD(satellite_filepath, pattern)
@@ -232,22 +233,29 @@ object satellite_model_svd extends App {
         val band_numB: Broadcast[Int] = sc.broadcast(sat_band_num)
         if (satToBeMasked) {
           val mask_tile_broad: Broadcast[Tile] = sc.broadcast(sat_mask_tile0)
-          satellite_grids_RDD = satellite_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -2000).toArrayDouble().filter(_ != -2000).map(m => if (m == -1000) Double.NaN else m))
+          sat_grids_RDD = satellite_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -2000).toArrayDouble().map(m => if (m == -1000) Double.NaN else m))
         } else {
-          satellite_grids_RDD = satellite_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble())
+          sat_grids_RDD = satellite_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble())
         }
       }
 
       //Get Index for each Cell
-      val grids_withIndex = satellite_grids_RDD.zipWithIndex().map { case (e, v) => (v, e) }
+      val grids_withIndex = sat_grids_RDD.zipWithIndex().map { case (e, v) => (v, e) }
       if (satToBeMasked) {
-        satellite_grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.filter(m => m._1 != -1000.0).map { case (v, i) => (i) }
+        satellite_grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.filter(m => m._1 != -2000.0).map { case (v, i) => (i) }
       } else {
         satellite_grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.map { case (v, i) => (i) }
       }
 
       //Get the Tile's grid
       satellite_grid0 = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.map { case (v, i) => (i, v) }
+
+      //Lets filter out NaN
+      if (satToBeMasked) {
+        satellite_grids_RDD = sat_grids_RDD.map(m => m.filter(m => m != -2000.0))
+      } else {
+        satellite_grids_RDD = sat_grids_RDD
+      }
 
       //Store in HDFS
       if (save_rdds) {
@@ -281,7 +289,28 @@ object satellite_model_svd extends App {
       num_cols_rows = (deserialize(metadata(1)).asInstanceOf[Int], deserialize(metadata(2)).asInstanceOf[Int])
       cellT = deserialize(metadata(3)).asInstanceOf[CellType]
     } else {
-      if (model_band_num != 0) {
+      if (model_band_num == 0) {
+        val model_geos_RDD = sc.hadoopGeoTiffRDD(model_filepath, pattern)
+        val model_tiles_RDD = model_geos_RDD.values
+
+        //Retrieve the number of cols and rows of the Tile's grid
+        val tiles_withIndex = model_tiles_RDD.zipWithIndex().map { case (v, i) => (i, v) }
+        val tile0 = (tiles_withIndex.filter(m => m._1 == 0).values.collect()) (0)
+
+        num_cols_rows = (tile0.cols, tile0.rows)
+        cellT = tile0.cellType
+
+        //Retrieve the ProjectExtent which contains metadata such as CRS and bounding box
+        val projected_extents_withIndex = model_geos_RDD.keys.zipWithIndex().map { case (e, v) => (v, e) }
+        projected_extent = (projected_extents_withIndex.filter(m => m._1 == 0).values.collect()) (0)
+
+        if (modToBeMasked) {
+          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mod_mask_tile0)
+          mod_grids_RDD = model_tiles_RDD.map(m => m.localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())
+        } else {
+          mod_grids_RDD = model_tiles_RDD.map(m => m.toArrayDouble())
+        }
+      } else {
         val model_geos_RDD = sc.hadoopMultibandGeoTiffRDD(model_filepath, pattern)
         val model_tiles_RDD = model_geos_RDD.values
 
@@ -299,35 +328,14 @@ object satellite_model_svd extends App {
         val band_numB: Broadcast[Int] = sc.broadcast(model_band_num)
         if (modToBeMasked) {
           val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mod_mask_tile0)
-          grids_RDD = model_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())
+          mod_grids_RDD = model_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())
         } else {
-          grids_RDD = model_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble())
-        }
-      } else {
-        val model_geos_RDD = sc.hadoopGeoTiffRDD(model_filepath, pattern)
-        val model_tiles_RDD = model_geos_RDD.values
-
-        //Retrieve the number of cols and rows of the Tile's grid
-        val tiles_withIndex = model_tiles_RDD.zipWithIndex().map { case (v, i) => (i, v) }
-        val tile0 = (tiles_withIndex.filter(m => m._1 == 0).values.collect()) (0)
-
-        num_cols_rows = (tile0.cols, tile0.rows)
-        cellT = tile0.cellType
-
-        //Retrieve the ProjectExtent which contains metadata such as CRS and bounding box
-        val projected_extents_withIndex = model_geos_RDD.keys.zipWithIndex().map { case (e, v) => (v, e) }
-        projected_extent = (projected_extents_withIndex.filter(m => m._1 == 0).values.collect()) (0)
-
-        if (modToBeMasked) {
-          val mask_tile_broad: Broadcast[Tile] = sc.broadcast(mod_mask_tile0)
-          grids_RDD = model_tiles_RDD.map(m => m.localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())
-        } else {
-          grids_RDD = model_tiles_RDD.map(m => m.toArrayDouble())
+          mod_grids_RDD = model_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble())
         }
       }
 
       //Get Index for each Cell
-      val grids_withIndex = grids_RDD.zipWithIndex().map { case (e, v) => (v, e) }
+      val grids_withIndex = mod_grids_RDD.zipWithIndex().map { case (e, v) => (v, e) }
       if (modToBeMasked) {
         model_grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.filter(m => m._1 != -1000.0).map { case (v, i) => (i) }
       } else {
@@ -339,9 +347,9 @@ object satellite_model_svd extends App {
 
       //Lets filter out NaN
       if (modToBeMasked) {
-        model_grids_RDD = grids_RDD.map(m => m.filter(m => m != -1000.0))
+        model_grids_RDD = mod_grids_RDD.map(m => m.filter(m => m != -1000.0))
       } else {
-        model_grids_RDD = grids_RDD
+        model_grids_RDD = mod_grids_RDD
       }
 
       //Store data in HDFS
@@ -540,8 +548,7 @@ object satellite_model_svd extends App {
     }
 
     //SVD
-    //val svd: SingularValueDecomposition[IndexedRowMatrix, Matrix] = matrix_mul.toIndexedRowMatrix().computeSVD(n_components.toInt, true)
-    val svd: SingularValueDecomposition[RowMatrix, Matrix] = matrix_mul.toRowMatrix().computeSVD(n_components.toInt, computeU = true)
+    val svd: SingularValueDecomposition[RowMatrix, Matrix] = matrix_mul.toRowMatrix().computeSVD(n_components.toInt, true)
 
     val U: RowMatrix = svd.U // The U factor is a RowMatrix.
     val s: Vector = svd.s // The singular values are stored in a local dense vector.
@@ -561,7 +568,7 @@ object satellite_model_svd extends App {
       cmd = "hadoop dfs -rm -r " + v_path
       Process(cmd)!
     }
-    sc.parallelize(V.rowIter.toVector.map(m => m.toArray.mkString("'")),1).saveAsTextFile(v_path)
+    sc.parallelize(V.rowIter.toVector.map(m => m.toArray.mkString("'")),4).saveAsTextFile(v_path)
 
     val s_path = out_path + "S" + matrix_mode_str +".csv"
     if (fs.exists(new org.apache.hadoop.fs.Path(s_path))) {
@@ -576,7 +583,7 @@ object satellite_model_svd extends App {
     cfor(0)(_ < n_components, _ + 1) { k =>
       //Merge two RDDs, one containing the clusters_ID indices and the other one the indices of a Tile's grid cells
       val kB = sc.broadcast(k)
-      val U_k_RDD = U.rows.map(_.toArray.zipWithIndex.filter(_._2 == kB.value).map{ case (v,i) => v}).flatMap(m => m)
+      val U_k_RDD = U.rows.map(_.toArray.zipWithIndex.filter(_._2 == kB.value).sortBy(_._2).map{ case (v,i) => v}).flatMap(m => m)
       val cluster_cell_pos = ((U_k_RDD.zipWithIndex().map{ case (v,i) => (i,v)}).join(mod_grid0_index_I)).map{ case (k,(v,i)) => (v,i)}
 
       //Associate a Cluster_IDs to respective Grid_cell
