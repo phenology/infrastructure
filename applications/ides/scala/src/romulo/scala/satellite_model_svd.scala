@@ -2,8 +2,9 @@
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 
 import geotrellis.proj4.CRS
+import geotrellis.raster.io.geotiff.writer.GeoTiffWriter
 import geotrellis.raster.io.geotiff.{SinglebandGeoTiff, _}
-import geotrellis.raster.{CellType, Tile, UByteCellType}
+import geotrellis.raster.{CellType, DoubleArrayTile, Tile, UByteCellType}
 import geotrellis.spark.io.hadoop._
 import geotrellis.vector.{Extent, ProjectedExtent}
 import org.apache.hadoop.io.SequenceFile.Writer
@@ -15,6 +16,9 @@ import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{SparkConf, SparkContext}
+import spire.syntax.cfor.cfor
+
+import scala.sys.process.Process
 
 object satellite_model_svd extends App {
 
@@ -71,8 +75,17 @@ object satellite_model_svd extends App {
       mod_mask_str = "_mask"
     if (satToBeMasked)
       sat_mask_str = "_mask"
+
+    val matrix_mode_str = matrix_mode match {
+      case 1 => "_Sc_Mc"
+      case 2 => "_Sr_Mr"
+      case _ => ""
+    }
+
     var model_grid0_path = out_path + model_dir + "_grid0"
     var model_grid0_index_path = out_path + model_dir + "_grid0_index"
+    var satellite_grid0_path = out_path + satellite_dir + "_grid0"
+    var satellite_grid0_index_path = out_path + satellite_dir + "_grid0_index"
 
     var model_grid_path = out_path + model_dir + "_grid"
     var satellite_grid_path = out_path + satellite_dir + "_grid"
@@ -108,9 +121,6 @@ object satellite_model_svd extends App {
       satellite_matrix_offline_mode = satellite_matrix_offline_exists
     }
 
-    var corr_tif = out_path + "_" + satellite_dir + "_" + model_dir + ".tif"
-    var corr_tif_tmp = "/tmp/svd_" + satellite_dir + "_" + model_dir + ".tif"
-
     //Years
     val model_years = 1980 to 2015
     val satellite_years = 1989 to 2014
@@ -144,6 +154,8 @@ object satellite_model_svd extends App {
     var model_summary: MultivariateStatisticalSummary = new RowMatrix(rows).computeColumnSummaryStatistics()
     var model_std: Array[Double] = new Array[Double](0)
 
+    var satellite_grid0: RDD[(Long, Double)] = sc.emptyRDD
+    var satellite_grid0_index: RDD[Long] = sc.emptyRDD
     var satellite_grids_RDD: RDD[Array[Double]] = sc.emptyRDD
     var satellite_grids: RDD[Array[Double]] = sc.emptyRDD
     var satellite_summary: MultivariateStatisticalSummary = new RowMatrix(rows).computeColumnSummaryStatistics()
@@ -199,6 +211,8 @@ object satellite_model_svd extends App {
     t0 = System.nanoTime()
     if (satellite_rdd_offline_mode) {
       satellite_grids_RDD = sc.objectFile(satellite_grid_path)
+      satellite_grid0 = sc.objectFile(satellite_grid0_path)
+      satellite_grid0_index = sc.objectFile(satellite_grid0_index_path)
     } else {
       //Lets load MODIS Singleband GeoTiffs and return RDD just with the tiles.
       if (sat_band_num == 0) {
@@ -207,7 +221,7 @@ object satellite_model_svd extends App {
 
         if (satToBeMasked) {
           val mask_tile_broad: Broadcast[Tile] = sc.broadcast(sat_mask_tile0)
-          satellite_grids_RDD = satellite_tiles_RDD.map(m => m.localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000))
+          satellite_grids_RDD = satellite_tiles_RDD.map(m => m.localInverseMask(mask_tile_broad.value, 1, -2000).toArrayDouble().filter(_ != -2000).map(m => if (m == -1000) Double.NaN else m))
         } else {
           satellite_grids_RDD = satellite_tiles_RDD.map(m => m.toArrayDouble())
         }
@@ -218,15 +232,28 @@ object satellite_model_svd extends App {
         val band_numB: Broadcast[Int] = sc.broadcast(sat_band_num)
         if (satToBeMasked) {
           val mask_tile_broad: Broadcast[Tile] = sc.broadcast(sat_mask_tile0)
-          satellite_grids_RDD = satellite_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble().filter(_ != -1000))
+          satellite_grids_RDD = satellite_tiles_RDD.map(m => m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -2000).toArrayDouble().filter(_ != -2000).map(m => if (m == -1000) Double.NaN else m))
         } else {
           satellite_grids_RDD = satellite_tiles_RDD.map(m => m.band(band_numB.value).toArrayDouble())
         }
       }
 
+      //Get Index for each Cell
+      val grids_withIndex = satellite_grids_RDD.zipWithIndex().map { case (e, v) => (v, e) }
+      if (satToBeMasked) {
+        satellite_grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.filter(m => m._1 != -1000.0).map { case (v, i) => (i) }
+      } else {
+        satellite_grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.map { case (v, i) => (i) }
+      }
+
+      //Get the Tile's grid
+      satellite_grid0 = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.map { case (v, i) => (i, v) }
+
       //Store in HDFS
       if (save_rdds) {
         satellite_grids_RDD.saveAsObjectFile(satellite_grid_path)
+        satellite_grid0.saveAsObjectFile(satellite_grid0_path)
+        satellite_grid0_index.saveAsObjectFile(satellite_grid0_index_path)
       }
     }
     val satellite_grids_withIndex = satellite_grids_RDD.zipWithIndex().map { case (e, v) => (v, e) }
@@ -239,7 +266,6 @@ object satellite_model_svd extends App {
     satellite_summary = Statistics.colStats(satellite_grids.map(m => Vectors.dense(m)))
     satellite_std = satellite_summary.variance.toArray.map(m => scala.math.sqrt(m))
 
-    var satellite_grid0_index: RDD[Double] = satellite_grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m)
     satellite_cells_size = satellite_grid0_index.count().toInt
     println("Number of cells is: " + satellite_cells_size)
     t1 = System.nanoTime()
@@ -486,6 +512,33 @@ object satellite_model_svd extends App {
       n_components = List(Mr.numRows(), Mr.numCols(), Sr.numRows(), Sr.numCols()).min
     }
 
+    //Paths to save GeoTiffs
+    var u_geotiff_hdfs_paths :Array[String] = Array.fill[String](n_components.toInt)("")
+    var u_geotiff_tmp_paths :Array[String] = Array.fill[String](n_components.toInt)("")
+    var v_geotiff_hdfs_paths :Array[String] = Array.fill[String](n_components.toInt)("")
+    var v_geotiff_tmp_paths :Array[String] = Array.fill[String](n_components.toInt)("")
+
+    //Create dirs in HDFS
+    var cmd = "hadoop dfs -mkdir " + out_path + "u_tiffs/"
+    Process(cmd)!
+
+    cmd = "hadoop dfs -mkdir " + out_path + "v_tiffs/"
+    Process(cmd)!
+
+    cfor(0)(_ < n_components, _ + 1) { k =>
+      u_geotiff_hdfs_paths(k) =  out_path + "u_tiffs/svd_u_" + k + "_" + n_components + matrix_mode_str + ".tif"
+      u_geotiff_tmp_paths(k) = "/tmp/svd_u_" + k + "_" + n_components + matrix_mode_str + ".tif"
+      if (fs.exists(new org.apache.hadoop.fs.Path(u_geotiff_hdfs_paths(k)))) {
+        println("There is already a GeoTiff with the path: " + u_geotiff_hdfs_paths(k) + ". Please make either a copy or move it to another location, otherwise, it will be over-written.")
+      }
+
+      v_geotiff_hdfs_paths(k) =  out_path + "v_tiffs/svd_v_" + k + "_" + n_components + matrix_mode_str + ".tif"
+      v_geotiff_tmp_paths(k) = "/tmp/svd_v_" + k + "_" + n_components + matrix_mode_str + ".tif"
+      if (fs.exists(new org.apache.hadoop.fs.Path(v_geotiff_hdfs_paths(k)))) {
+        println("There is already a GeoTiff with the path: " + v_geotiff_hdfs_paths(k) + ". Please make either a copy or move it to another location, otherwise, it will be over-written.")
+      }
+    }
+
     //SVD
     //val svd: SingularValueDecomposition[IndexedRowMatrix, Matrix] = matrix_mul.toIndexedRowMatrix().computeSVD(n_components.toInt, true)
     val svd: SingularValueDecomposition[RowMatrix, Matrix] = matrix_mul.toRowMatrix().computeSVD(n_components.toInt, computeU = true)
@@ -496,8 +549,96 @@ object satellite_model_svd extends App {
     val S = Matrices.diag(s)
 
     //Save into CSV files.
-    U.rows.map(m => m.toArray.mkString(",")).repartition(1).saveAsTextFile(out_path + "U.csv")
-    sc.parallelize(V.rowIter.toVector.map(m => m.toArray.mkString("'")),1).saveAsTextFile(out_path + "V.csv")
-    sc.parallelize(S.rowIter.toVector.map(m => m.toArray.mkString(",")),1).saveAsTextFile(out_path + "S.csv")
+    val u_path = out_path + "U" + matrix_mode_str +".csv"
+    if (fs.exists(new org.apache.hadoop.fs.Path(u_path))) {
+      cmd = "hadoop dfs -rm -r " + u_path
+      Process(cmd)!
+    }
+    U.rows.map(m => m.toArray.mkString(",")).repartition(1).saveAsTextFile(u_path)
+
+    val v_path = out_path + "V" + matrix_mode_str +".csv"
+    if (fs.exists(new org.apache.hadoop.fs.Path(v_path))) {
+      cmd = "hadoop dfs -rm -r " + v_path
+      Process(cmd)!
+    }
+    sc.parallelize(V.rowIter.toVector.map(m => m.toArray.mkString("'")),1).saveAsTextFile(v_path)
+
+    val s_path = out_path + "S" + matrix_mode_str +".csv"
+    if (fs.exists(new org.apache.hadoop.fs.Path(s_path))) {
+      cmd = "hadoop dfs -rm -r " + s_path
+      Process(cmd)!
+    }
+    sc.parallelize(S.rowIter.toVector.map(m => m.toArray.mkString(",")),1).saveAsTextFile(s_path)
+
+    //Create GeoTiffs for U (dimension is M(A) x n_components)
+    t0 = System.nanoTime()
+    val mod_grid0_index_I = model_grid0_index.zipWithIndex().map{ case (v,i) => (i,v)}
+    cfor(0)(_ < n_components, _ + 1) { k =>
+      //Merge two RDDs, one containing the clusters_ID indices and the other one the indices of a Tile's grid cells
+      val kB = sc.broadcast(k)
+      val U_k_RDD = U.rows.map(_.toArray.zipWithIndex.filter(_._2 == kB.value).map{ case (v,i) => v}).flatMap(m => m)
+      val cluster_cell_pos = ((U_k_RDD.zipWithIndex().map{ case (v,i) => (i,v)}).join(mod_grid0_index_I)).map{ case (k,(v,i)) => (v,i)}
+
+      //Associate a Cluster_IDs to respective Grid_cell
+      val grid_clusters :RDD[ (Long, (Double, Option[Double]))] = model_grid0.leftOuterJoin(cluster_cell_pos.map{ case (c,i) => (i, c)})
+
+      //Convert all None to NaN
+      val grid_clusters_res = grid_clusters.sortByKey(true).map{case (k, (v, c)) => if (c == None) (k, Double.NaN) else (k, c.get)}
+
+      //Define a Tile
+      val cluster_cells :Array[Double] = grid_clusters_res.values.collect()
+      val cluster_cellsD = DoubleArrayTile(cluster_cells, num_cols_rows._1, num_cols_rows._2)
+      val geoTif = new SinglebandGeoTiff(cluster_cellsD, projected_extent.extent, projected_extent.crs, Tags.empty, GeoTiffOptions(compression.DeflateCompression))
+
+      //Save to /tmp/
+      GeoTiffWriter.write(geoTif, u_geotiff_tmp_paths(k))
+
+      //Upload to HDFS
+      var cmd = "hadoop dfs -copyFromLocal -f " + u_geotiff_tmp_paths(k) + " " + u_geotiff_hdfs_paths(k)
+      Process(cmd)!
+
+      //Remove from /tmp/
+      cmd = "rm -fr " + u_geotiff_tmp_paths(k)
+      Process(cmd)!
+    }
+    t1 = System.nanoTime()
+    println("Elapsed time: " + (t1 - t0) + "ns")
+
+    //Create GeoTiffs for V (dimension is M(A) x n_components)
+    t0 = System.nanoTime()
+    val sat_grid0_index_I = satellite_grid0_index.zipWithIndex().map{ case (v,i) => (i,v)}
+    val iter = V.colIter
+    var k :Int = 0
+    while (iter.hasNext) {
+      //Merge two RDDs, one containing the clusters_ID indices and the other one the indices of a Tile's grid cells
+      val V_k_RDD = sc.parallelize(iter.next().toArray)
+      val cluster_cell_pos = ((V_k_RDD.zipWithIndex().map{ case (v,i) => (i,v)}).join(sat_grid0_index_I)).map{ case (k,(v,i)) => (v,i)}
+
+      //Associate a Cluster_IDs to respective Grid_cell
+      val grid_clusters :RDD[ (Long, (Double, Option[Double]))] = satellite_grid0.leftOuterJoin(cluster_cell_pos.map{ case (c,i) => (i, c)})
+
+      //Convert all None to NaN
+      val grid_clusters_res = grid_clusters.sortByKey(true).map{case (k, (v, c)) => if (c == None) (k, Double.NaN) else (k, c.get)}
+
+      //Define a Tile
+      val cluster_cells :Array[Double] = grid_clusters_res.values.collect()
+      val cluster_cellsD = DoubleArrayTile(cluster_cells, num_cols_rows._1, num_cols_rows._2)
+      val geoTif = new SinglebandGeoTiff(cluster_cellsD, projected_extent.extent, projected_extent.crs, Tags.empty, GeoTiffOptions(compression.DeflateCompression))
+
+      //Save to /tmp/
+      GeoTiffWriter.write(geoTif, v_geotiff_tmp_paths(k))
+
+      //Upload to HDFS
+      var cmd = "hadoop dfs -copyFromLocal -f " + v_geotiff_tmp_paths(k) + " " + v_geotiff_hdfs_paths(k)
+      Process(cmd)!
+
+      //Remove from /tmp/
+      cmd = "rm -fr " + v_geotiff_tmp_paths(k)
+      Process(cmd)!
+
+      k += 1
+    }
+    t1 = System.nanoTime()
+    println("Elapsed time: " + (t1 - t0) + "ns")
   }
 }
