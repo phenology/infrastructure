@@ -436,8 +436,6 @@ object satellite_model_svd extends App {
       //save to disk
       Sc.toIndexedRowMatrix().rows.saveAsObjectFile(sc_path)
     }
-    Sc.persist(StorageLevel.DISK_ONLY)
-
 
     //Model
     val model_cells_sizeB = sc.broadcast(model_cells_size)
@@ -490,7 +488,6 @@ object satellite_model_svd extends App {
       //save to disk
       Mc.toIndexedRowMatrix().rows.saveAsObjectFile(mc_path)
     }
-    Mc.persist(StorageLevel.DISK_ONLY)
 
     //SR
     var Sr :BlockMatrix = null
@@ -504,18 +501,24 @@ object satellite_model_svd extends App {
 
     //Normal Matrix
     if (matrix_mode == 0) {
+      model_blockMatrix.persist(StorageLevel.DISK_ONLY)
+      satellite_blockMatrix.persist(StorageLevel.DISK_ONLY)
       matrix_mul = model_blockMatrix.toIndexedRowMatrix().multiply(satellite_blockMatrix.toLocalMatrix())
       n_components = List(model_blockMatrix.numRows(), model_blockMatrix.numCols(), satellite_blockMatrix.numRows(), satellite_blockMatrix.numCols()).min
     }
 
     //SC Matrix
     if (matrix_mode == 1) {
+      Mc.persist(StorageLevel.DISK_ONLY)
+      Sc.persist(StorageLevel.DISK_ONLY)
       matrix_mul = Mc.toIndexedRowMatrix().multiply(Sc.toLocalMatrix())
       n_components = List(Mc.numRows(), Mc.numCols(), Sc.numRows(), Sc.numCols()).min
     }
 
     //SR Matrix
     if (matrix_mode == 2) {
+      Mr.persist(StorageLevel.DISK_ONLY)
+      Sr.persist(StorageLevel.DISK_ONLY)
       matrix_mul = Mr.toIndexedRowMatrix().multiply(Sr.toLocalMatrix())
       n_components = List(Mr.numRows(), Mr.numCols(), Sr.numRows(), Sr.numCols()).min
     }
@@ -548,9 +551,9 @@ object satellite_model_svd extends App {
     }
 
     //SVD
-    val svd: SingularValueDecomposition[RowMatrix, Matrix] = matrix_mul.toRowMatrix().computeSVD(n_components.toInt, true)
+    val svd: SingularValueDecomposition[IndexedRowMatrix, Matrix] = matrix_mul.computeSVD(n_components.toInt, true)
 
-    val U: RowMatrix = svd.U // The U factor is a RowMatrix.
+    val U: IndexedRowMatrix = svd.U // The U factor is a RowMatrix.
     val s: Vector = svd.s // The singular values are stored in a local dense vector.
     val V: Matrix = svd.V // The V factor is a local dense matrix.
     val S = Matrices.diag(s)
@@ -561,14 +564,16 @@ object satellite_model_svd extends App {
       cmd = "hadoop dfs -rm -r " + u_path
       Process(cmd)!
     }
-    U.rows.map(m => m.toArray.mkString(",")).repartition(1).saveAsTextFile(u_path)
+    val U_RDD = U.rows.sortBy(_.index).map(_.vector.toArray)
+    U_RDD.cache()
+    U_RDD.map(m => m.mkString(",")).repartition(1).saveAsTextFile(u_path)
 
     val v_path = out_path + "V" + matrix_mode_str +".csv"
     if (fs.exists(new org.apache.hadoop.fs.Path(v_path))) {
       cmd = "hadoop dfs -rm -r " + v_path
       Process(cmd)!
     }
-    sc.parallelize(V.rowIter.toVector.map(m => m.toArray.mkString("'")),4).saveAsTextFile(v_path)
+    sc.parallelize(V.rowIter.toVector.map(m => m.toArray.mkString(",")),4).saveAsTextFile(v_path)
 
     val s_path = out_path + "S" + matrix_mode_str +".csv"
     if (fs.exists(new org.apache.hadoop.fs.Path(s_path))) {
@@ -580,11 +585,15 @@ object satellite_model_svd extends App {
     //Create GeoTiffs for U (dimension is M(A) x n_components)
     t0 = System.nanoTime()
     val mod_grid0_index_I = model_grid0_index.zipWithIndex().map{ case (v,i) => (i,v)}
+    mod_grid0_index_I.cache()
+    model_grid0.cache()
     cfor(0)(_ < n_components, _ + 1) { k =>
       //Merge two RDDs, one containing the clusters_ID indices and the other one the indices of a Tile's grid cells
       val kB = sc.broadcast(k)
-      val U_k_RDD = U.rows.map(_.toArray.zipWithIndex.filter(_._2 == kB.value).sortBy(_._2).map{ case (v,i) => v}).flatMap(m => m)
+      //val U_k_RDD = U.rows.map(_.toArray.zipWithIndex.filter(_._2 == kB.value).sortBy(_._2).map{ case (v,i) => v}).flatMap(m => m)
+      val U_k_RDD = U_RDD.map(_(kB.value))
       val cluster_cell_pos = ((U_k_RDD.zipWithIndex().map{ case (v,i) => (i,v)}).join(mod_grid0_index_I)).map{ case (k,(v,i)) => (v,i)}
+      cluster_cell_pos.cache()
 
       //Associate a Cluster_IDs to respective Grid_cell
       val grid_clusters :RDD[ (Long, (Double, Option[Double]))] = model_grid0.leftOuterJoin(cluster_cell_pos.map{ case (c,i) => (i, c)})
@@ -596,6 +605,7 @@ object satellite_model_svd extends App {
       val cluster_cells :Array[Double] = grid_clusters_res.values.collect()
       val cluster_cellsD = DoubleArrayTile(cluster_cells, num_cols_rows._1, num_cols_rows._2)
       val geoTif = new SinglebandGeoTiff(cluster_cellsD, projected_extent.extent, projected_extent.crs, Tags.empty, GeoTiffOptions(compression.DeflateCompression))
+      cluster_cell_pos.unpersist()
 
       //Save to /tmp/
       GeoTiffWriter.write(geoTif, u_geotiff_tmp_paths(k))
@@ -608,6 +618,11 @@ object satellite_model_svd extends App {
       cmd = "rm -fr " + u_geotiff_tmp_paths(k)
       Process(cmd)!
     }
+    U_RDD.unpersist()
+    model_grid0.unpersist()
+    mod_grid0_index_I.unpersist()
+
+
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
