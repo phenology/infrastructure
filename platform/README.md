@@ -26,8 +26,10 @@ The owner will email a zip folder with all the configuration parameters. Unzip t
 The platform provides two storage levels, a block-based storage through Hadoop Distributed FileSystem (HDFS) and a object-based sotrage through Minio.
 
 ### HDFS
+HDFS is the distributed storage of Hadoop and to access it is required to install Hadoop binaries.
 
-Before The user needs to download the binaries for Hadoop 2.8.1.
+#### Hadoop binaries
+Before The user needs to download the binaries for Hadoop 2.8.1 (it should be the same version as the one used in the cluster).
 ```
 wget http://apache.hippo.nl/hadoop/common/hadoop-2.8.1/hadoop-2.8.1.tar.gz
 tar -xzf hadoop-2.8.1.tar.gz
@@ -46,7 +48,8 @@ drwxr-xr-x   - spark  spark               0 2017-06-08 10:04 /user/spark
 drwxr-xr-x   - ubuntu ubuntu              0 2017-06-08 10:04 /user/ubuntu
 ```
 
-Not it is time to upload some data. The following example shows how to upload the GeoTiffs for the **spring-index**.
+#### Upload data
+Now it is time to upload some data. The following example shows how to upload the GeoTiffs for the **spring-index**.
 ```
 # Copy the files
 ./bin/hadoop dfs -copyFromLocal <path_to_spring-index>/spring-index/ /user/hadoop/
