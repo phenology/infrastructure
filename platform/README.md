@@ -20,7 +20,7 @@ SURF-Sara HPC cloud | pheno | Raul/Romulo
 The owner will email a zip folder with all the configuration parameters. Unzip the folder and follow the instructions. Before that we recommend to [install ansible](https://github.com/nlesc-sherlock/emma/blob/master/ansible.md#install-ansible).
 
 * To install the platform the user should read the instructions detailed in [**emma's** set up](https://github.com/nlesc-sherlock/emma/blob/master/README.md#setup-environment). This assumes that you use an Ubuntu machine or that you have Windows 10 with [**WSL**](https://msdn.microsoft.com/en-us/commandline/wsl/install_guide). If not, go to [**emma's** README](https://github.com/nlesc-sherlock/emma/blob/master/README.md).
-* To update the **Hadoop** and **Spark** cluster of your platform please follow the instructions in [**emma's update existent platform**](https://github.com/nlesc-sherlock/emma/blob/master/ansible.md#update-an-existent-platform).
+* To update the **Hadoop** and **Spark** cluster of your platform please follow the instructions in [**emma's update existent platform**](https://github.com/nlesc-sherlock/emma/blob/master/ansible.md#update-an-existing-platform).
 * To add new nodes to an existent cluster please read [**emma's add new node**](https://github.com/nlesc-sherlock/emma/blob/master/ansible.md#extend-an-existing-platform).
 
 ## Data loading
