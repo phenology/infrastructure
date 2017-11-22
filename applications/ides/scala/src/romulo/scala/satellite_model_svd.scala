@@ -551,7 +551,8 @@ object satellite_model_svd extends App {
     }
 
     //SVD
-    val svd: SingularValueDecomposition[IndexedRowMatrix, Matrix] = matrix_mul.computeSVD(n_components.toInt, true)
+    //val svd: SingularValueDecomposition[IndexedRowMatrix, Matrix] = matrix_mul.computeSVD(n_components.toInt, true)
+    val svd: SingularValueDecomposition[IndexedRowMatrix, Matrix] = new IndexedRowMatrix(matrix_mul.rows.sortBy(_.index)).computeSVD(n_components.toInt, true)
 
     val U: IndexedRowMatrix = svd.U // The U factor is a RowMatrix.
     val s: Vector = svd.s // The singular values are stored in a local dense vector.
@@ -566,7 +567,7 @@ object satellite_model_svd extends App {
     }
     val U_RDD = U.rows.sortBy(_.index).map(_.vector.toArray)
     U_RDD.cache()
-    U_RDD.map(m => m.mkString(",")).repartition(1).saveAsTextFile(u_path)
+    U_RDD.map(m => m.mkString(",")).saveAsTextFile(u_path)
 
     val v_path = out_path + "V" + matrix_mode_str +".csv"
     if (fs.exists(new org.apache.hadoop.fs.Path(v_path))) {
@@ -633,8 +634,8 @@ object satellite_model_svd extends App {
     var k :Int = 0
     while (iter.hasNext) {
       //Merge two RDDs, one containing the clusters_ID indices and the other one the indices of a Tile's grid cells
-      val V_k_RDD = sc.parallelize(iter.next().toArray)
-      val cluster_cell_pos = ((V_k_RDD.zipWithIndex().map{ case (v,i) => (i,v)}).join(sat_grid0_index_I)).map{ case (k,(v,i)) => (v,i)}
+      val V_k_RDD = sc.parallelize(iter.next().toArray.zipWithIndex.map{ case (v,i) => (i.toLong, v)})
+      val cluster_cell_pos = (V_k_RDD.join(sat_grid0_index_I)).map{ case (k,(v,i)) => (v,i)}
 
       //Associate a Cluster_IDs to respective Grid_cell
       val grid_clusters :RDD[ (Long, (Double, Option[Double]))] = satellite_grid0.leftOuterJoin(cluster_cell_pos.map{ case (c,i) => (i, c)})
