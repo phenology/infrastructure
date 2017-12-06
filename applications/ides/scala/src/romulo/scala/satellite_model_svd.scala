@@ -396,7 +396,7 @@ object satellite_model_svd extends App {
         case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, number)
       }
     }.flatMap(x => x)
-    val satellite_blockMatrix: BlockMatrix = new CoordinateMatrix(sat_byColumnAndRow).toBlockMatrix()
+    val satellite_blockMatrix: CoordinateMatrix = new CoordinateMatrix(sat_byColumnAndRow)
 
     //SC
     val sc_exists = fs.exists(new org.apache.hadoop.fs.Path(sc_path))
@@ -447,7 +447,7 @@ object satellite_model_svd extends App {
         case (number, columnIndex) => new MatrixEntry(rowIndex, columnIndex, number)
       }
     }.flatMap(x => x)
-    val model_blockMatrix: BlockMatrix = new CoordinateMatrix(mod_byColumnAndRow).transpose().toBlockMatrix()
+    val model_blockMatrix: CoordinateMatrix = new CoordinateMatrix(mod_byColumnAndRow).transpose()
 
     //MC
     val mc_exists = fs.exists(new org.apache.hadoop.fs.Path(mc_path))
@@ -501,9 +501,9 @@ object satellite_model_svd extends App {
 
     //Normal Matrix
     if (matrix_mode == 0) {
-      model_blockMatrix.persist(StorageLevel.DISK_ONLY)
-      satellite_blockMatrix.persist(StorageLevel.DISK_ONLY)
-      matrix_mul = model_blockMatrix.toIndexedRowMatrix().multiply(satellite_blockMatrix.toLocalMatrix())
+      //model_blockMatrix.toIndexedRowMatrix().p.persist(StorageLevel.DISK_ONLY)
+      //satellite_blockMatrix.persist(StorageLevel.DISK_ONLY)
+      matrix_mul = model_blockMatrix.toIndexedRowMatrix().multiply(satellite_blockMatrix.toBlockMatrix().toLocalMatrix())
       n_components = List(model_blockMatrix.numRows(), model_blockMatrix.numCols(), satellite_blockMatrix.numRows(), satellite_blockMatrix.numCols()).min
     }
 
