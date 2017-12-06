@@ -20,14 +20,17 @@ SURF-Sara HPC cloud | pheno | Raul/Romulo
 The owner will email a zip folder with all the configuration parameters. Unzip the folder and follow the instructions. Before that we recommend to [install ansible](https://github.com/nlesc-sherlock/emma/blob/master/ansible.md#install-ansible).
 
 * To install the platform the user should read the instructions detailed in [**emma's** set up](https://github.com/nlesc-sherlock/emma/blob/master/README.md#setup-environment). This assumes that you use an Ubuntu machine or that you have Windows 10 with [**WSL**](https://msdn.microsoft.com/en-us/commandline/wsl/install_guide). If not, go to [**emma's** README](https://github.com/nlesc-sherlock/emma/blob/master/README.md).
-* To update the **Hadoop** and **Spark** cluster of your platform please follow the instructions in [**emma's update existent platform**](https://github.com/nlesc-sherlock/emma/blob/master/ansible.md#update-an-existent-platform).
+* To update the **Hadoop** and **Spark** cluster of your platform please follow the instructions in [**emma's update existent platform**](https://github.com/nlesc-sherlock/emma/blob/master/ansible.md#update-an-existing-platform).
+* To add new nodes to an existent cluster please read [**emma's add new node**](https://github.com/nlesc-sherlock/emma/blob/master/ansible.md#extend-an-existing-platform).
 
 ## Data loading
 The platform provides two storage levels, a block-based storage through Hadoop Distributed FileSystem (HDFS) and a object-based sotrage through Minio.
 
 ### HDFS
+HDFS is the distributed storage of Hadoop and to access it is required to install Hadoop binaries.
 
-Before The user needs to download the binaries for Hadoop 2.8.1.
+#### Hadoop binaries
+Before The user needs to download the binaries for Hadoop 2.8.1 (it should be the same version as the one used in the cluster).
 ```
 wget http://apache.hippo.nl/hadoop/common/hadoop-2.8.1/hadoop-2.8.1.tar.gz
 tar -xzf hadoop-2.8.1.tar.gz
@@ -46,7 +49,8 @@ drwxr-xr-x   - spark  spark               0 2017-06-08 10:04 /user/spark
 drwxr-xr-x   - ubuntu ubuntu              0 2017-06-08 10:04 /user/ubuntu
 ```
 
-Not it is time to upload some data. The following example shows how to upload the GeoTiffs for the **spring-index**.
+#### Upload data
+Now it is time to upload some data. The following example shows how to upload the GeoTiffs for the **spring-index**.
 ```
 # Copy the files
 ./bin/hadoop dfs -copyFromLocal <path_to_spring-index>/spring-index/ /user/hadoop/
