@@ -63,18 +63,6 @@ object kmeans_satellite extends App {
 
 
     //MODE OF OPERATION VALIDATION
-    //Validation, do not modify these lines.
-    var single_band = false
-    if (geoTiff_dir == "all") {
-      single_band = false
-    } else {
-      single_band = true
-      if (band_num > 0) {
-        println("Since it is single band, we will use band 0!!!")
-        band_num = 0
-      }
-    }
-
     if (minClusters > maxClusters) {
       maxClusters = minClusters
       stepClusters = 1
@@ -261,9 +249,10 @@ object kmeans_satellite extends App {
       num_cols_rows = (deserialize(metadata(1)).asInstanceOf[Int], deserialize(metadata(2)).asInstanceOf[Int])
       cellT = deserialize(metadata(3)).asInstanceOf[CellType]
     } else {
-      if (single_band) {
+      if (band_num == 0) {
         //Lets load a Singleband GeoTiffs and return RDD just with the tiles.
         var geos_RDD = hadoopGeoTiffRDD(filepath, pattern)
+        geos_RDD.cache()
         var tiles_RDD = geos_RDD.map{ case (i,(p,t)) => (i,t)}
 
         //Retrive the numbre of cols and rows of the Tile's grid
@@ -285,6 +274,7 @@ object kmeans_satellite extends App {
       } else {
         //Lets load Multiband GeoTiffs and return RDD just with the tiles.
         val geos_RDD = hadoopMultibandGeoTiffRDD(filepath, pattern)
+        geos_RDD.cache()
         var tiles_RDD = geos_RDD.map{ case (i,(p,t)) => (i,t)}
 
         //Retrive the numbre of cols and rows of the Tile's grid
@@ -502,6 +492,7 @@ object kmeans_satellite extends App {
     numClusters_id = 0
     val grid0_index_I = grid0_index.zipWithIndex().map{ case (v,i) => (i,v)}
     grid0_index_I.cache()
+    grid0.cache()
     grids_matrix_index.cache()
 
     cfor(minClusters)(_ <= maxClusters, _ + stepClusters) { numClusters =>
