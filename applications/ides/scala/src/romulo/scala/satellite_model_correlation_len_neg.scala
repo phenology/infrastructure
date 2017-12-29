@@ -67,6 +67,10 @@ object satellite_model_correlation_len_neg extends App {
     var conf = sc.hadoopConfiguration
     var fs = org.apache.hadoop.fs.FileSystem.get(conf)
 
+    //Create dirs in HDFS
+    var cmd = "hadoop dfs -mkdir -p " + out_path
+    Process(cmd)!
+
     //Paths to store data structures for Offline runs
     var mask_str = ""
     if (toBeMasked)
@@ -507,7 +511,7 @@ object satellite_model_correlation_len_neg extends App {
     //Upload to HDFS
 
     corr_tif = out_path + satellite_dir + "_" + model_dir + ".tif"
-    var cmd = "hadoop dfs -copyFromLocal -f " + corr_tif_tmp + " " + corr_tif
+    cmd = "hadoop dfs -copyFromLocal -f " + corr_tif_tmp + " " + corr_tif
     Process(cmd)!
 
     //Remove from /tmp/
