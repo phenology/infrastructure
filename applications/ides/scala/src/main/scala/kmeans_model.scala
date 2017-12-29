@@ -61,20 +61,8 @@ object kmeans_model extends App {
 
 
 
-    //OPERATION MODE VALIDATION
-    var single_band = false
-    if (geoTiff_dir == "BloomFinal" || geoTiff_dir == "LeafFinal") {
-      single_band = false
-    } else if (geoTiff_dir == "LastFreeze" || geoTiff_dir == "DamageIndex") {
-      single_band = true
-      if (band_num > 0) {
-        println("Since LastFreezze and DamageIndex are single band, we will use band 0!!!")
-        band_num  = 0
-      }
-    } else {
-      println("Directory unknown, please set either BloomFinal, LeafFinal, LastFreeze or DamageIndex!!!")
-    }
 
+    //MODE OF OPERATION VALIDATION
     if (minClusters > maxClusters) {
       maxClusters = minClusters
       stepClusters = 1
@@ -92,6 +80,7 @@ object kmeans_model extends App {
     var grids_noNaN_path = offline_dir_path + geoTiff_dir + "/grids_noNaN" + "_"+ band_num + mask_str
     var metadata_path = offline_dir_path + geoTiff_dir + "/metadata" + "_"+ band_num + mask_str
     var grids_matrix_path = offline_dir_path + geoTiff_dir + "/grids_matrix" + "_"+ band_num + mask_str
+    var grids_matrix_index_path = offline_dir_path + geoTiff_dir + "/grids_matrix_index" + "_" + band_num + mask_str
 
     //Check offline modes
     var conf = sc.hadoopConfiguration
@@ -248,7 +237,7 @@ object kmeans_model extends App {
     }
 
     //Local variables
-    val pattern: String = "tif"
+    val pattern: String = "*.tif"
     val filepath: String = dir_path + geoTiff_dir
 
     if (rdd_offline_mode) {
@@ -261,11 +250,11 @@ object kmeans_model extends App {
       num_cols_rows = (deserialize(metadata(1)).asInstanceOf[Int], deserialize(metadata(2)).asInstanceOf[Int])
       cellT = deserialize(metadata(3)).asInstanceOf[CellType]
     } else {
-      if (single_band) {
+      if (band_num == 0) {
         //Lets load a Singleband GeoTiffs and return RDD just with the tiles.
         var geos_RDD = hadoopGeoTiffRDD(filepath, pattern)
         geos_RDD.cache()
-        var tiles_RDD :RDD[(Int, Tile)] = geos_RDD.map{ case (i,(p,t)) => (i,t)}
+        var tiles_RDD = geos_RDD.map{ case (i,(p,t)) => (i,t)}
 
         //Retrive the numbre of cols and rows of the Tile's grid
         val tiles_withIndex = tiles_RDD//.zipWithIndex().map{case (e,v) => (v,e)}
@@ -279,13 +268,14 @@ object kmeans_model extends App {
 
         if (toBeMasked) {
           val mask_tile_broad :Broadcast[Tile] = sc.broadcast(mask_tile0)
-          grids_RDD = tiles_RDD.map{ case (i,m) => (i, m.localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())}
+          grids_RDD = tiles_RDD.map{ case (i,m) => (i,m.localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())}
         } else {
           grids_RDD = tiles_RDD.map{ case (i,m) => (i, m.toArrayDouble())}
         }
       } else {
         //Lets load Multiband GeoTiffs and return RDD just with the tiles.
         val geos_RDD = hadoopMultibandGeoTiffRDD(filepath, pattern)
+        geos_RDD.cache()
         val tiles_RDD = geos_RDD.map{ case (i,(p,t)) => (i,t)}
 
         //Retrive the numbre of cols and rows of the Tile's grid
@@ -364,18 +354,22 @@ object kmeans_model extends App {
     t0 = System.nanoTime()
     //Global variables
     var grids_matrix: RDD[Vector] = sc.emptyRDD
+    var grids_matrix_index :RDD[(Long, Long)] = sc.emptyRDD
     val grid_cells_sizeB = sc.broadcast(grid_cells_size)
 
     if (matrix_offline_mode) {
       grids_matrix = sc.objectFile(grids_matrix_path)
+      grids_matrix_index = sc.objectFile(grids_matrix_index_path)
     } else {
-      //Dense Vector
-      //val mat :RowMatrix = new RowMatrix(grids_noNaN_RDD.map(m => Vectors.dense(m)))
-      //Sparse Vector
-      val indRowMat :IndexedRowMatrix = new IndexedRowMatrix(grids_noNaN_RDD.map{ case (i, m) => (i,m.zipWithIndex)}.map{ case (i,m) => (i,m.filter(!_._1.isNaN))}.map{ case (i,m) =>  new IndexedRow(i.toLong, Vectors.sparse(grid_cells_sizeB.value.toInt, m.map(v => v._2), m.map(v => v._1)))})
-      grids_matrix = indRowMat.toCoordinateMatrix().transpose().toIndexedRowMatrix().rows.sortBy(_.index).map(_.vector)
-      if (save_matrix)
+      val mat :IndexedRowMatrix = new IndexedRowMatrix(grids_noNaN_RDD.map{ case (i, m) => (i,m.zipWithIndex)}.map{ case (i,m) => (i,m.filter(!_._1.isNaN))}.map{ case (i,m) =>  new IndexedRow(i.toLong, Vectors.sparse(grid_cells_sizeB.value.toInt, m.map(v => v._2), m.map(v => v._1)))})
+      val mat_T = mat.toCoordinateMatrix().transpose().toIndexedRowMatrix().rows.sortBy(_.index)
+      grids_matrix = mat_T.map(_.vector)
+      grids_matrix_index = mat_T.map(_.index).zipWithIndex().map{ case (v,i) => (i,v)}
+
+      if (save_matrix) {
         grids_matrix.saveAsObjectFile(grids_matrix_path)
+        grids_matrix_index.saveAsObjectFile(grids_matrix_index_path)
+      }
     }
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
@@ -383,8 +377,6 @@ object kmeans_model extends App {
 
 
     //KMEANS
-
-    //---//
     t0 = System.nanoTime()
     //Global variables
     var kmeans_models :Array[KMeansModel] = new Array[KMeansModel](num_kmeans)
@@ -442,15 +434,15 @@ object kmeans_model extends App {
       //Un-persist it to save memory
       grids_matrix.unpersist()
 
+
     }
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
 
-    //---//
+
+    //INSPECT WSSE
     t0 = System.nanoTime()
-    //current
-    println(wssse_data)
 
     //from disk
     if (fs.exists(new org.apache.hadoop.fs.Path(wssse_path))) {
@@ -461,7 +453,9 @@ object kmeans_model extends App {
     println("Elapsed time: " + (t1 - t0) + "ns")
 
 
-    //---//
+
+
+    //RUN KMEANS CLUSTERING
     t0 = System.nanoTime()
     //Cache it so kmeans is more efficient
     grids_matrix.cache()
@@ -482,12 +476,14 @@ object kmeans_model extends App {
 
 
 
+
     //SANITY TEST
     t0 = System.nanoTime()
-    val kmeans_res_out = kmeans_res(0).take(150)
+    val kmeans_res_out = kmeans_res(0).filter(_ != 0).filter(_ != 1).take(150)
     println(kmeans_res_out.size)
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
+
 
 
 
@@ -497,12 +493,14 @@ object kmeans_model extends App {
     val grid0_index_I = grid0_index.zipWithIndex().map{ case (v,i) => (i,v)}
     grid0_index_I.cache()
     grid0.cache()
+    grids_matrix_index.cache()
+
     cfor(minClusters)(_ <= maxClusters, _ + stepClusters) { numClusters =>
-      //Merge two RDDs, one containing the clusters_ID indices and the other one the indices of a Tile's grid cells
-      val cluster_cell_pos = ((kmeans_res(numClusters_id).zipWithIndex().map{ case (v,i) => (i,v)}).join(grid0_index_I)).map{ case (k,(v,i)) => (v,i)}
+      val kmeans_out = (kmeans_res(numClusters_id).zipWithIndex().map{ case (v,i) => (i,v)}).join(grids_matrix_index).map{ case (z,(k,i)) => (i,k)}
+      val cluster_cell_pos = kmeans_out.join(grid0_index_I).map{ case (k,(v,i)) => (v,i)}
 
       //Associate a Cluster_IDs to respective Grid_cell
-      val grid_clusters :RDD[ (Long, (Double, Option[Int]))] = grid0.leftOuterJoin(cluster_cell_pos.map{ case (c,i) => (i.toLong, c)})
+      val grid_clusters = grid0.map{ case (i, v) => if (v == 0.0) (i,Double.NaN) else (i,v)}.leftOuterJoin(cluster_cell_pos.map{ case (c,i) => (i.toLong, c)})
 
       //Convert all None to NaN
       val grid_clusters_res = grid_clusters.sortByKey(true).map{case (k, (v, c)) => if (c == None) (k, Int.MaxValue) else (k, c.get)}
@@ -523,10 +521,12 @@ object kmeans_model extends App {
 
       //Upload to HDFS
       var cmd = "hadoop dfs -copyFromLocal -f " + geotiff_tmp_paths(numClusters_id) + " " + geotiff_hdfs_paths(numClusters_id)
+      println(cmd)
       Process(cmd)!
 
       //Remove from /tmp/
       cmd = "rm -fr " + geotiff_tmp_paths(numClusters_id)
+      println(cmd)
       Process(cmd)!
 
       numClusters_id += 1

@@ -116,7 +116,7 @@ object kmeans_satellite extends App {
     if (minClusters != maxClusters) {
       num_kmeans = ((maxClusters - minClusters) / stepClusters) + 1
     }
-    println(num_kmeans)
+
     var kmeans_model_paths: Array[String] = Array.fill[String](num_kmeans)("")
     var wssse_path: String = offline_dir_path + geoTiff_dir + "/" + numIterations + "_wssse"
     var geotiff_hdfs_paths: Array[String] = Array.fill[String](num_kmeans)("")
@@ -161,6 +161,7 @@ object kmeans_satellite extends App {
 
 
     //FUNCTIONS TO (DE)SERIALIZE ANY STRUCTURE
+
     def serialize(value: Any): Array[Byte] = {
       val out_stream: ByteArrayOutputStream = new ByteArrayOutputStream()
       val obj_out_stream = new ObjectOutputStream(out_stream)
@@ -179,7 +180,6 @@ object kmeans_satellite extends App {
 
 
     //LOAD GEOTIFFS
-    val pattern: String = "*.tif"
     //----//
     def hadoopGeoTiffRDD(satellite_filepath :String, pattern :String): RDD[(Int, (ProjectedExtent, Tile))] = {
       val listFiles = sc.binaryFiles(satellite_filepath + "/" + pattern).sortBy(_._1).keys.collect()
@@ -237,6 +237,7 @@ object kmeans_satellite extends App {
     }
 
     //Local variables
+    val pattern: String = "*.tif"
     val filepath: String = dir_path + geoTiff_dir
 
     if (rdd_offline_mode) {
@@ -275,7 +276,7 @@ object kmeans_satellite extends App {
         //Lets load Multiband GeoTiffs and return RDD just with the tiles.
         val geos_RDD = hadoopMultibandGeoTiffRDD(filepath, pattern)
         geos_RDD.cache()
-        var tiles_RDD = geos_RDD.map{ case (i,(p,t)) => (i,t)}
+        val tiles_RDD = geos_RDD.map{ case (i,(p,t)) => (i,t)}
 
         //Retrive the numbre of cols and rows of the Tile's grid
         val tiles_withIndex = tiles_RDD//.zipWithIndex().map{case (e,v) => (v,e)}
@@ -291,7 +292,7 @@ object kmeans_satellite extends App {
         val band_numB :Broadcast[Int] = sc.broadcast(band_num)
         if (toBeMasked) {
           val mask_tile_broad :Broadcast[Tile] = sc.broadcast(mask_tile0)
-          grids_RDD = tiles_RDD.map{ case (i,m) => (i,m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())}
+          grids_RDD = tiles_RDD.map{ case (i,m) => (i, m.band(band_numB.value).localInverseMask(mask_tile_broad.value, 1, -1000).toArrayDouble())}
         } else {
           grids_RDD = tiles_RDD.map{ case (i,m) => (i, m.band(band_numB.value).toArrayDouble())}
         }
@@ -304,17 +305,18 @@ object kmeans_satellite extends App {
         grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.filter(m => m._1 != -1000.0).map { case (v, i) => (i) }
       } else {
         grid0_index = grids_withIndex.filter(m => m._1 == 0).values.flatMap(m => m).zipWithIndex.map { case (v, i) => (i) }
-
       }
+
       //Get the Tile's grid
       grid0 = grids_withIndex.filter(m => m._1 == 0).values.flatMap( m => m).zipWithIndex.map{case (v,i) => (i,v)}
 
       //Lets filter out NaN
       if (toBeMasked) {
-        grids_noNaN_RDD = grids_RDD.map{case (i,m) => (i,m.filter(m => m != -1000.0))}
+        grids_noNaN_RDD = grids_RDD.map{ case (i,m) => (i,m.filter(m => m != -1000.0))}
       } else {
         grids_noNaN_RDD = grids_RDD
       }
+
       //Store data in HDFS
       if (save_rdds) {
         grid0.saveAsObjectFile(grid0_path)
@@ -372,8 +374,7 @@ object kmeans_satellite extends App {
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
-    val res = grids_noNaN_RDD.map{ case (i, m) => (i,m.zipWithIndex)}.map{ case (i,m) => (i,m.filter(!_._1.isNaN))}.map{ case (i,m) =>  new IndexedRow(i.toLong, Vectors.sparse(grid_cells_sizeB.value.toInt, m.map(v => v._2), m.map(v => v._1)))}
-    val res1 = res.filter(_.index == 0).map(_.vector).collect()(0).toArray.take(100)
+
 
     //KMEANS TRAINING
     t0 = System.nanoTime()
@@ -445,7 +446,7 @@ object kmeans_satellite extends App {
 
     //from disk
     if (fs.exists(new org.apache.hadoop.fs.Path(wssse_path))) {
-      var wssse_data_tmp: RDD[(Int, Int, Double)] = sc.objectFile(wssse_path) //.collect()//.toList
+      var wssse_data_tmp :RDD[(Int, Int, Double)] = sc.objectFile(wssse_path)//.collect()//.toList
       println(wssse_data_tmp.collect().toList)
     }
     t1 = System.nanoTime()
@@ -458,6 +459,7 @@ object kmeans_satellite extends App {
     t0 = System.nanoTime()
     //Cache it so kmeans is more efficient
     grids_matrix.cache()
+
     var kmeans_res: Array[RDD[Int]] = Array.fill(num_kmeans)(sc.emptyRDD)
     var kmeans_centroids: Array[Array[Double]] = Array.fill(num_kmeans)(Array.emptyDoubleArray)
     numClusters_id = 0
@@ -478,8 +480,6 @@ object kmeans_satellite extends App {
     //SANITY TEST
     t0 = System.nanoTime()
     val kmeans_res_out = kmeans_res(0).filter(_ != 0).filter(_ != 1).take(150)
-    kmeans_res_out.foreach(print)
-
     println(kmeans_res_out.size)
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
@@ -497,7 +497,7 @@ object kmeans_satellite extends App {
 
     cfor(minClusters)(_ <= maxClusters, _ + stepClusters) { numClusters =>
       val kmeans_out = (kmeans_res(numClusters_id).zipWithIndex().map{ case (v,i) => (i,v)}).join(grids_matrix_index).map{ case (z,(k,i)) => (i,k)}
-      val cluster_cell_pos = (kmeans_out.join(grid0_index_I).map{ case (k,(v,i)) => (v,i)})
+      val cluster_cell_pos = kmeans_out.join(grid0_index_I).map{ case (k,(v,i)) => (v,i)}
 
       //Associate a Cluster_IDs to respective Grid_cell
       val grid_clusters = grid0.map{ case (i, v) => if (v == 0.0) (i,Double.NaN) else (i,v)}.leftOuterJoin(cluster_cell_pos.map{ case (c,i) => (i.toLong, c)})
@@ -531,6 +531,8 @@ object kmeans_satellite extends App {
 
       numClusters_id += 1
     }
+    grid0_index_I.unpersist()
+    grid0.unpersist()
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
   }
