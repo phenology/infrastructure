@@ -402,9 +402,11 @@ object satellite_model_kmeans extends App {
     grids_matrix.cache()
 
     var kmeans_res: Array[RDD[Int]] = Array.fill(num_kmeans)(sc.emptyRDD)
+    var kmeans_centroids: Array[Array[Double]] = Array.fill(num_kmeans)(Array.emptyDoubleArray)
     numClusters_id = 0
     cfor(minClusters)(_ <= maxClusters, _ + stepClusters) { numClusters =>
       kmeans_res(numClusters_id) = kmeans_models(numClusters_id).predict(grids_matrix)
+      kmeans_centroids(numClusters_id) = kmeans_models(numClusters_id).clusterCenters.map(m => m(0))
       numClusters_id += 1
     }
 
@@ -444,10 +446,16 @@ object satellite_model_kmeans extends App {
         val grid_clusters :RDD[ (Long, (Double, Option[Int]))] = grid0.leftOuterJoin(cluster_cell_pos.map{ case (c,i) => (i.toLong, c)})
 
         //Convert all None to NaN
-        val grid_clusters_res = grid_clusters.sortByKey(true).map{case (k, (v, c)) => if (c == None) (k, Double.NaN) else (k, c.get.toDouble)}
+        val grid_clusters_res = grid_clusters.sortByKey(true).map{case (k, (v, c)) => if (c == None) (k, Int.MaxValue) else (k, c.get)}
 
         //Define a Tile
-        val cluster_cells :Array[Double] = grid_clusters_res.values.collect()
+        val cluster_cellsID :Array[Int] = grid_clusters_res.values.collect()
+        var cluster_cells :Array[Double] = Array.fill(cluster_cellsID.length)(Double.NaN)
+        cfor(0)(_ < cluster_cellsID.size, _ + 1) { cellID =>
+          if (cluster_cellsID(cellID) != Int.MaxValue) {
+            cluster_cells(cellID) = kmeans_centroids(numClusters_id)(cluster_cellsID(cellID))
+          }
+        }
         val cluster_cellsD = DoubleArrayTile(cluster_cells, num_cols_rows._1, num_cols_rows._2)
         val geoTif = new SinglebandGeoTiff(cluster_cellsD, projected_extent.extent, projected_extent.crs, Tags.empty, GeoTiffOptions(compression.DeflateCompression))
 
