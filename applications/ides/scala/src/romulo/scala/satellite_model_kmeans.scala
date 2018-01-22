@@ -366,6 +366,10 @@ object satellite_model_kmeans extends App {
     println("Elapsed time: " + (t1 - t0) + "ns")
 
 
+    grid0.cache()
+    val nans_index = grid0.filter(_._2 != -1000).map(_._2).zipWithIndex().filter(_._1.isNaN).map(_._2).collect()
+    val nans_indexB = sc.broadcast(nans_index)
+    val inpA_grids_noNaNs = inpA_grids.map{ case (i,v) => (i,v.zipWithIndex.filter{ case (v,i) => nans_indexB.value.contains(i)}.map{ case (v,i) => v})}
 
 
     //MATRIX//
@@ -375,7 +379,7 @@ object satellite_model_kmeans extends App {
     if (matrix_offline_mode) {
       grids_matrix = sc.objectFile(matrix_path)
     } else {
-      val inp_grids :RDD[Array[Double]] = inpA_grids.flatMap{ case (i,m) => m}.zipWithIndex().map{ case (v,i) => (i,v)}.join(inpB_grids.flatMap{case (i,m) => m}.zipWithIndex().map{case (v,i) => (i,v)}).sortByKey(true).map{case (i, (a1,a2)) => Array(a1, a2)}
+      val inp_grids :RDD[Array[Double]] = inpA_grids_noNaNs.flatMap{ case (i,m) => m}.zipWithIndex().map{ case (v,i) => (i,v)}.join(inpB_grids.flatMap{case (i,m) => m}.zipWithIndex().map{case (v,i) => (i,v)}).sortByKey(true).map{case (i, (a1,a2)) => Array(a1, a2)}
       val cells_sizeB = sc.broadcast(cells_size)
       grids_matrix = inp_grids.map(m => m.zipWithIndex).map(m => m.filter(!_._1.isNaN)).map(m => Vectors.sparse(cells_sizeB.value.toInt, m.map(v => v._2), m.map(v => v._1)))
       if (save_matrix)
@@ -384,6 +388,8 @@ object satellite_model_kmeans extends App {
     t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
 
+    inpA_grids_noNaNs.cache()
+    inpB_grids.cache()
 
 
 
