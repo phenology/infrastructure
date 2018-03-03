@@ -1,0 +1,58 @@
+
+===Install script======
+Follow tutorial but:
+
+1. default ansible ssh keys location diffrent, in ansible.cfg replace: private_key_file = $CLUSTER_NAME.key (path is somehow  already set)
+
+2. dependency fail, skip scispark lib: ansible-playbook install_platform_light.yml --skip-tags "scispark"
+
+3.  failed :jupyterhub (toree kernal) : Build & Package, FileNotFound; recipe for target 'dist/toree-pip/toree-0.3.0-dev1.tar.gz' failed": It was auto-ignored; The 0.3.0 version is not present at all: Possibly solution -> log to machine and install toree-0.2.0 -> sudo pip install https://dist.apache.org/repos/dist/dev/incubator/toree/0.2.0/snapshots/dev1/toree-pip/toree-0.2.0.dev1.tar.gzl; jupyter toree install (maybe, fixed it )
+
+
+
+=========run combo=======
+. env_linux.sh
+vagrant up
+vagrant hostmanager
+ansible-playbook start_platform.yml
+
+
+==========links=========
+https://github.com/phenology/infrastructure
+https://github.com/phenology/hsr-phenological-modelling
+
+
+========Addresses===========
+JupyterHub (username: mycluster, pass1234)
+mycluster0.mydomain:8000
+
+To check your Spark nodes:
+mycluster0.mydomain:8080
+
+To check your HDFS:
+mycluster0.mydomain:50070
+
+
+
+===========find process===========
+apt-auto update ps -ax | grep apt
+
+
+====== Copy Commands=====
+sudo -E ./bin/hadoop dfs -copyFromLocal /home/vik/Documents/mproject/data/spring-index/BloomFinalLowPR /user/hadoop
+
+sudo -E ./bin/hadoop dfs -copyFromLocal /home/vik/Documents/mproject/data/avhrr/SOSTLowPR /user/hadoop
+
+vagrant scp mycluster0:/etc/hadoop/conf/core-site.xml ../../Hadoop/hadoop-2.8.1/etc/hadoop/core-site.xml
+
+
+=========Local path for MathLab==============
+
+Matlab Installation dir:
+/usr/local/MATLAB/MATLAB_Runtime/v91
+
+
+From ~/Documents/mproject/timesat/timesat33/compiled/Linux64 run:
+./run_TIMESAT.sh /usr/local/MATLAB/MATLAB_Runtime/v91
+
+
