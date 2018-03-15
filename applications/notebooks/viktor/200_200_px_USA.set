@@ -1,0 +1,38 @@
+Settings file version: 3.3 
+USA_200_by_200_px      %Job_name (no blanks) 
+1               %Image /series mode (1/0) 
+0               %Trend (1/0) 
+0               %Use quality data (1/0) 
+/media/vik/799E6DA576F23642/Data NDVI 1km/Img_only/listfile.txt  %Data file list/name 
+dummy  %Mask file list/name 
+1               %Image file type 
+0               %Byte order (1/0) 
+5872 40095      %Image dimension (nrow ncol) 
+3800 4000 9000 9200      %Processing window (start row end row start col end col) 
+3 36           %No. years and no. points per year 
+0 250         %Valid data range (lower upper) 
+-1e+06 1e+06 1      %Quality range 1 and weight 
+-1e+06 1e+06 1      %Quality range 2 and weight 
+-1e+06 1e+06 1      %Quality range 3 and weight 
+0.0             %Amplitude cutoff value 
+0               %Debug flag (3/2/1/0) 
+1 1 1           %Output files (1/0 1/0 1/0) 
+0               %Use land cover (1/0) 
+   %Name of landcover file 
+0               %Spike method (3/2/1/0) 
+2.0             %Spike value 
+3.0             %STL stiffness value (1-10) 
+1               %No. of landcover classes 
+************ 
+1               %Land cover code for class  1 
+1.0             %Seasonality parameter (0-1) 
+1               %No. of envelope iterations (3/2/1) 
+2               %Adaptation strength (1-10) 
+0 -99999             %Force minimum (1/0) and value 
+2               %Fitting method (3/2/1) 
+1               %Weight update method 
+4               %Window size for Sav-Gol. 
+0               %Reserved  
+0               %Reserved 
+1               %Season start / end method (4/3/2/1) 
+0.5 0.5         %Season start / end values 
