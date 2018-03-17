@@ -62,7 +62,7 @@ vagrant scp mycluster0:/etc/hadoop/conf/core-site.xml ../../Hadoop/hadoop-2.8.1/
 vagrant scp "/media/vik/799E6DA576F23642/Data NDVI 1km/Img_small" mycluster0:
 
 
-=====Copy to HDFS====
+=====Copy to HDFS (ssh into machine)====
 sudo -E hadoop fs -put ~/mycluster0 /user/hadoop  
 (-E preserve env. variables for root user)
 
@@ -78,9 +78,6 @@ From ~/Documents/mproject/timesat/timesat33/compiled/Linux64 run:
 ====Build Changes=====
 1.Hadoop mirror broken: in hadoop_vars.yml (global) change: hadoop_mirror: "https://archive.apache.org/dist/hadoop/core/hadoop-2.8.1/"
 2.Build errror: In toree.yml up the version number : toree-0.3.0.dev1.tar.gz (will brake again when they iterate on the next version)
-
-
-
 
 
 =========Spirits==============
