@@ -37,6 +37,9 @@ To check your HDFS:
 mycluster0.mydomain:50070
 
 
+==========switch to root user===========
+sudo -s
+
 
 ===========find process===========
 apt-auto update ps -ax | grep apt
@@ -50,13 +53,18 @@ vagrant ssh mycluster1
 
 
 ====== Copy Commands (from within machine)=====
-sudo -E ./bin/hadoop dfs -copyFromLocal /home/vik/Documents/mproject/data/spring-index/BloomFinalLowPR /user/hadoop
-sudo -E ./bin/hadoop dfs -copyFromLocal	/media/vik/799E6DA576F23642/Data NDVI 1km/Img_only /user/hadoop 
+sudo -E hadoop dfs -copyFromLocal /home/vik/Documents/mproject/data/spring-index/BloomFinalLowPR /user/hadoop
+sudo -E hadoop dfs -copyFromLocal /media/vik/799E6DA576F23642/Data%20NDVI%201km/Img_only /user/hadoop 
 
-sudo -E ./bin/hadoop dfs -copyFromLocal /home/vik/Documents/mproject/data/avhrr/SOSTLowPR /user/hadoop
+sudo -E hadoop dfs -copyFromLocal /home/vik/Documents/mproject/data/avhrr/SOSTLowPR /user/hadoop
+
+====== Copy Commands (from host machine)=====
+HADOOP_USER_NAME=pheno hadoop dfs -copyFromLocal /media/vik/799E6DA576F23642/Data%20NDVI%201km/Img_only /user/hadoop 
+HADOOP_USER_NAME=root hadoop dfs -copyFromLocal /media/vik/799E6DA576F23642/Data%20NDVI%201km/Img_only/listfile.txt /user/hadoop/listfile.txt
 
 =====out copy from vm=====
-vagrant scp mycluster0:/etc/hadoop/conf/core-site.xml ../../Hadoop/hadoop-2.8.1/etc/hadoop/core-site.xml
+vagrant scp mycluster0:/etc/hadoop/conf/core-site.xml ../../hadoop-2.8.1/etc/hadoop/core-site.xml
+vagrant scp mycluster0:/etc/hadoop/conf/hdfs-site.xml ../../hadoop-2.8.1/etc/hadoop/core-site.xml
 
 ====in copy to vm====
 vagrant scp "/media/vik/799E6DA576F23642/Data NDVI 1km/Img_small" mycluster0:
@@ -73,6 +81,13 @@ Matlab Installation dir:
 
 From ~/Documents/mproject/timesat/timesat33/compiled/Linux64 run:
 ./run_TIMESAT.sh /usr/local/MATLAB/MATLAB_Runtime/v91
+
+==============Add permissions for all users=========
+HADOOP_USER_NAME=root hadoop fs -chmod -R 777 /user/hadoop
+
+============Add executable to path===========
+1. nano ~/.bashrc, at the end add: 
+2. export PATH=$PATH:/home/vik/Documents/hadoop-2.8.1/bin
 
 
 ====Build Changes=====
