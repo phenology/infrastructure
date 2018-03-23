@@ -116,8 +116,10 @@ cd <root_dir>/<sub_dir> ; for f in `ls *`; do s3cmd put $f s3://<root_dir>/<sub_
 
 It is possible to mount a minio bucket as a file system. For that we use [Goofys](https://github.com/kahing/goofys) which is a high-performance, POSIX-ish Amazon S3 file system written in Go. The user should follow its [installation](https://github.com/kahing/goofys#installation) and [usage](https://github.com/kahing/goofys#usage) guide to have a minio bucket mounted as a file system.
 
-To mount buckets files in your local directory minio do:
+To mount buckets **files** in your local directory **~/minio** do:
 ```
+mkdir ~/minio
+
 #Replace <<cluster_name>> by your cluster name, such as emma, pheno, valencia etc.
-./goofys --endpoint http://<<cluster_name>>.phenovari-utwente.surf-hosted.nl:9091/ files ~/minio
+./goofys --endpoint http://<<cluster_name>>0.phenovari-utwente.surf-hosted.nl:9091/ files ~/minio
 ```
