@@ -112,3 +112,7 @@ To upload data to a sub-directory follow this example:
 ```
 cd <root_dir>/<sub_dir> ; for f in `ls *`; do s3cmd put $f s3://<root_dir>/<sub_dir>/$f; done
 ```
+#### Mount Minio bucket
+
+It is possible to mount a minio bucket as a file system. For that we use [Goofys](https://github.com/kahing/goofys) which is a high-performance, POSIX-ish Amazon S3 file system written in Go. The user should follow its [installation](https://github.com/kahing/goofys#installation) and [usage](https://github.com/kahing/goofys#usage) guide to have a minio bucket mounted as a file system.
+
