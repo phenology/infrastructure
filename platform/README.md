@@ -110,9 +110,9 @@ s3cmd  ls s3://files
 s3cmd get s3://files/sonnets.txt sonnets.txt
 ```
 
-To upload data to a sub-directory the user needs to specify the sub-directories in the bucket's name. For example, to load all the files from **avhrr/SOST** into a bucket called **avhrr/SOST** the user should do the following:
+To upload data to a sub-directory the user needs to specify the sub-directories in the bucket's name. For example, to load all the files from **~/avhrr/SOST** into a bucket called **files/avhrr/SOST** the user should do the following:
 ```
-cd avhrr/SOST ; for f in `ls *`; do s3cmd put $f s3://avhrr/SOST/$f; done
+cd ~/avhrr/SOST ; for f in `ls *`; do s3cmd put $f s3://files/avhrr/SOST/$f; done
 ```
 #### Mount Minio bucket
 
