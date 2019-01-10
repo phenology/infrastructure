@@ -86,10 +86,12 @@ The addition of nodes does not have any upper limit, however, it also requires a
 [Minio](https://www.minio.io/) is a distributed object storage server built for cloud applications and devops.
 To use minio in distributed mode and have redundancy there are some pre-requisites. To understand them you should read the [distributed minio quickstart guide](https://docs.minio.io/docs/distributed-minio-quickstart-guide). 
 
-Minio web GUI is available though *http://pheno0.phenovari-utwente.surf-hosted.nl:9091*, or any other host part of the *minio* group.
-For command line interaction we use [S3cmd tool for Amazon Simple Storage Service (S3)](https://github.com/s3tools/s3cmd). S3cmd is a free command line tool and client for uploading, retrieving and managing data in Amazon S3 and other cloud storage service providers that use the S3 protocol, such as Google Cloud storage and Minio.
+Minio web GUI is available though *http://<CLUSTER_NAME>0.phenovari-utwente.surf-hosted.nl:9091*, or any other host part of the *minio* group. For command line interaction we use [S3cmd tool for Amazon Simple Storage Service (S3)](https://github.com/s3tools/s3cmd). S3cmd is a free command line tool and client for uploading, retrieving and managing data in Amazon S3 and other cloud storage service providers that use the S3 protocol, such as Google Cloud storage and Minio. To install it in Ubuntu run the following command:
+```
+sudo apt-get install s3cmd
+```
 
-To access Minio in our platform the user should create **.s3cfg** at the his/her home directory.
+To access Minio in our platform the user should create **.s3cfg** at the his/her home directory and add the following information:
 ```
 host_base = <IP_pheno0>:9091
 host_bucket = <IP_pheno0>:9091
@@ -108,7 +110,18 @@ s3cmd  ls s3://files
 s3cmd get s3://files/sonnets.txt sonnets.txt
 ```
 
-To upload data to a sub-directory follow this example:
+To upload data to a sub-directory the user needs to specify the sub-directories in the bucket's name. For example, to load all the files from **~/avhrr/SOST** into a bucket called **files/avhrr/SOST** the user should do the following:
 ```
-cd <root_dir>/<sub_dir> ; for f in `ls *`; do s3cmd put $f s3://<root_dir>/<sub_dir>/$f; done
+cd ~/avhrr/SOST ; for f in `ls *`; do s3cmd put $f s3://files/avhrr/SOST/$f; done
+```
+#### Mount Minio bucket
+
+It is possible to mount a minio bucket as a file system. For that we use [Goofys](https://github.com/kahing/goofys) which is a high-performance, POSIX-ish Amazon S3 file system written in Go. The user should follow its [installation](https://github.com/kahing/goofys#installation) and [usage](https://github.com/kahing/goofys#usage) guide to have a minio bucket mounted as a file system.
+
+To mount buckets **files** in your local directory **~/minio** do:
+```
+mkdir ~/minio
+
+#Replace <<cluster_name>> by your cluster name, such as emma, pheno, valencia etc.
+./goofys --endpoint http://<<cluster_name>>0.phenovari-utwente.surf-hosted.nl:9091/ files ~/minio
 ```
