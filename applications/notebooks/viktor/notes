@@ -1,0 +1,122 @@
+
+===Install script======
+Follow tutorial but:
+
+1. default ansible ssh keys location diffrent, in ansible.cfg replace: private_key_file = $CLUSTER_NAME.key (path is somehow  already set)
+
+2. dependency fail, skip scispark lib: ansible-playbook install_platform_light.yml --skip-tags "scispark"
+
+3.  failed :jupyterhub (toree kernal) : Build & Package, FileNotFound; recipe for target 'dist/toree-pip/toree-0.3.0-dev1.tar.gz' failed": It was auto-ignored; The 0.3.0 version is not present at all: Possibly solution -> log to machine and install toree-0.2.0 -> sudo pip install https://dist.apache.org/repos/dist/dev/incubator/toree/0.2.0/snapshots/dev1/toree-pip/toree-0.2.0.dev1.tar.gzl; jupyter toree install (maybe, fixed it )
+
+==========install_script=========
+ansible-playbook install_platform_light.yml --skip-tags "scispark"
+
+=========run combo=======
+. env_linux.sh
+vagrant up
+vagrant hostmanager	
+ansible-playbook start_platform.yml
+
+=====Install copy vagrant plugin======
+vagrant plugin install vagrant-scp
+
+
+==========links=========
+https://github.com/phenology/infrastructure
+https://github.com/phenology/hsr-phenological-modelling
+
+
+========Addresses===========
+JupyterHub (username: mycluster, pass1234)
+mycluster0.mydomain:8000
+
+To check your Spark nodes:
+mycluster0.mydomain:8080
+
+To check your HDFS:
+mycluster0.mydomain:50070
+
+
+==========switch to root user===========
+sudo -s
+
+
+===========find process===========
+apt-auto update ps -ax | grep apt
+
+===========find folder name===========
+sudo find / -type d -name "hdfs-site"
+
+===========log into machine===========
+vagrant ssh mycluster0
+vagrant ssh mycluster1
+
+
+====== Copy Commands (from within machine)=====
+sudo -E hadoop dfs -copyFromLocal /home/vik/Documents/mproject/data/spring-index/BloomFinalLowPR /user/hadoop
+sudo -E hadoop dfs -copyFromLocal /media/vik/799E6DA576F23642/Data%20NDVI%201km/Img_only /user/hadoop 
+
+sudo -E hadoop dfs -copyFromLocal /home/vik/Documents/mproject/data/avhrr/SOSTLowPR /user/hadoop
+
+====== Copy Commands (from host machine)=====
+HADOOP_USER_NAME=pheno hadoop dfs -copyFromLocal /media/vik/799E6DA576F23642/Data%20NDVI%201km/Img_only /user/hadoop 
+HADOOP_USER_NAME=root hadoop dfs -copyFromLocal /media/vik/799E6DA576F23642/Data%20NDVI%201km/Img_only/listfile.txt /user/hadoop/listfile.txt
+
+=====out copy from vm=====
+vagrant scp mycluster0:/etc/hadoop/conf/core-site.xml ../../hadoop-2.8.1/etc/hadoop/core-site.xml
+vagrant scp mycluster0:/etc/hadoop/conf/hdfs-site.xml ../../hadoop-2.8.1/etc/hadoop/core-site.xml
+
+====in copy to vm====
+vagrant scp "/media/vik/799E6DA576F23642/Data NDVI 1km/Img_small" mycluster0:
+
+
+=====Copy to HDFS (ssh into machine)====
+sudo -E hadoop fs -put ~/mycluster0 /user/hadoop  
+(-E preserve env. variables for root user)
+
+=========Local path for MathLab==============
+
+Matlab Installation dir:
+/usr/local/MATLAB/MATLAB_Runtime/v91
+
+From ~/Documents/mproject/timesat/timesat33/compiled/Linux64 run:
+./run_TIMESAT.sh /usr/local/MATLAB/MATLAB_Runtime/v91
+
+==============Add permissions for all users=========
+HADOOP_USER_NAME=root hadoop fs -chmod -R 777 /user/hadoop
+
+============Add executable to path===========
+1. nano ~/.bashrc, at the end add: 
+2. export PATH=$PATH:/home/vik/Documents/hadoop-2.8.1/bin
+
+
+====Build Changes=====
+1.Hadoop mirror broken: in hadoop_vars.yml (global) change: hadoop_mirror: "https://archive.apache.org/dist/hadoop/core/hadoop-2.8.1/"
+2.Build errror: In toree.yml up the version number : toree-0.3.0.dev1.tar.gz (will brake again when they iterate on the next version)
+
+
+=========Spirits==============
+Tools:
+1. Detect season: GOAL: Derive phenological parameter IMGs from a dekadal time-series of IMGs. The program inspects a time series of dekadal images with any type of Vegetation Index VI (NDVI,fAPAR,...). For a given “target year”, it detects (always per pixel) the number of green seasons Ns (Ns = 0, 1 or at most 2), and for each such cycle s the dates of the start (SOS), the maximum (MOS) and the end (EOS) of the season.
+
+
+=========Sen2Agy==============
+prerequisites: CentOS
+
+Can produce NDVI and LAI (Leaf Area Index) vegetation status through the L3B product.
+
+The  mandatory input of L3B processor is S2 time series, optionally computer by an additional L8 time series, turned into L2A products through the L2A processor (products discriptors in .HDR format)
+
+Procedure: downnalod either Sentinel 2 (L1C) or Landsat 8 (L1T) data, run the mandatory atmospheric Correction (L2A) and use the output as input to the vegetation L3B products.
+
+The good think is that the  project is open sourced, so we possibly can make tweaks, but I will certainly  need some help if we go that way.
+
+pheno_processing.py - to create phenological NDVI L3B products.
+
+"SLURM allows the system to run on a server cluster. The Sen2-Agri installer configures SLURM for a single-machine cluster,but the sysyem administrator can modify these settings."
+
+
+copy  recursively all .img files in a targer dir:
+find ./ -name '*.img' -exec cp -prv '{}' '/media/vik/799E6DA576F23642/Data NDVI 1km/Img_only' ';'
+
+
