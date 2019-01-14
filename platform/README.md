@@ -9,7 +9,7 @@ Emma is a project where ansible is used to setup a Spark cluster with GeoTrellis
 
 **For this project the platform provision should only install a light version of the platform**. Such light platform does not have Docker-swarm and GlusterFS. To install such platform the user instead of running **ansible-playbook install_platform.yml**, as mentioned in [provision section](https://github.com/nlesc-sherlock/emma/blob/phenology/ansible.md#provision), the user should run the following:
 ```
-ansible-playbook install_platform_light.yml
+ansible-playbook install_platform_light.yml --tags "common,minio,hadoop,spark,jupyterhub"
 ```
 * To use an existing plattform, contact the owner listed below
 
